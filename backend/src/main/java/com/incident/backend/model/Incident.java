@@ -8,65 +8,92 @@ import java.util.List;
 @Entity
 @Table(name = "incidents")
 public class Incident {
-
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
-
-    @Column(nullable = false, length = 200)
-    private String title;
-
-    @Column(nullable = false, length = 5000)
-    private String description;
-
-    @Column(length = 100)
-    private String component;
-
-    @Enumerated(EnumType.STRING)
-    @Column(length = 40)
-    private Classification classification;
-
-    @Enumerated(EnumType.STRING)
-    @Column(length = 30)
-    private Reproducibility reproducibility;
-
-    @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 30)
-    private Priority priority = Priority.NOT_SET;
-
-    @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 30)
-    private IncidentState state = IncidentState.SCREEN;
-
-    @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 40)
-    private Resolution resolution = Resolution.UNRESOLVED;
+    @Column(name = "incident_id")
+    private Integer id;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "requestor_id", nullable = false)
-    private User requestor;
+    @JoinColumn(name = "reporter_id", nullable = false)
+    private User reporter;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "assignee_id")
-    private User assignee;
+    @JoinColumn(name = "assigned_technician_id")
+    private Technician assignedTechnician;
 
-    @Column(length = 100)
-    private String milestone;
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "category_id", nullable = false)
+    private Category category;
 
-    @Column(length = 100)
-    private String category;
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "service_id", nullable = false)
+    private AffectedService service;
 
-    @Column(length = 300)
-    private String keywords;
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "sla_policy_id")
+    private SlaPolicy slaPolicy;
 
-    @Column(length = 2000)
-    private String rootCause;
+    @Column(nullable = false, columnDefinition = "text")
+    private String description;
 
-    @Column(nullable = false, updatable = false)
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 20)
+    private Impact impact;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 20)
+    private Urgency urgency;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "business_criticality", nullable = false, length = 20)
+    private BusinessCriticality businessCriticality;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 20)
+    private Priority priority;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "status", nullable = false, length = 30)
+    private IncidentStatus status = IncidentStatus.REPORTED;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "sla_status", nullable = false, length = 30)
+    private SlaStatus slaStatus = SlaStatus.NOT_STARTED;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "response_sla_status", nullable = false, length = 30)
+    private SlaObjectiveStatus responseSlaStatus = SlaObjectiveStatus.NOT_STARTED;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "resolution_sla_status", nullable = false, length = 30)
+    private SlaObjectiveStatus resolutionSlaStatus = SlaObjectiveStatus.NOT_STARTED;
+
+    @Column(name = "investigation_details", columnDefinition = "text")
+    private String investigationDetails;
+
+    @Column(name = "resolution_details", columnDefinition = "text")
+    private String resolutionDetails;
+
+    @Column(name = "closure_details", columnDefinition = "text")
+    private String closureDetails;
+
+    @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
-    @Column(nullable = false)
-    private Instant updatedAt;
+    @Column(name = "first_response_at")
+    private Instant firstResponseAt;
+
+    @Column(name = "resolved_at")
+    private Instant resolvedAt;
+
+    @Column(name = "closed_at")
+    private Instant closedAt;
+
+    @Column(name = "response_deadline")
+    private Instant responseDeadline;
+
+    @Column(name = "resolution_deadline")
+    private Instant resolutionDeadline;
 
     @OneToMany(mappedBy = "incident", cascade = CascadeType.ALL, orphanRemoval = true)
     @OrderBy("createdAt ASC")
@@ -74,63 +101,58 @@ public class Incident {
 
     @PrePersist
     void onCreate() {
-        createdAt = Instant.now();
-        updatedAt = createdAt;
+        if (createdAt == null) createdAt = Instant.now();
+        if (status == null) status = IncidentStatus.REPORTED;
+        if (slaStatus == null) slaStatus = SlaStatus.NOT_STARTED;
+        if (responseSlaStatus == null) responseSlaStatus = SlaObjectiveStatus.NOT_STARTED;
+        if (resolutionSlaStatus == null) resolutionSlaStatus = SlaObjectiveStatus.NOT_STARTED;
     }
 
-    @PreUpdate
-    void onUpdate() {
-        updatedAt = Instant.now();
-    }
-
-    public Long getId() { return id; }
-
-    public String getTitle() { return title; }
-    public void setTitle(String title) { this.title = title; }
-
+    public Integer getId() { return id; }
+    public User getReporter() { return reporter; }
+    public void setReporter(User reporter) { this.reporter = reporter; }
+    public Technician getAssignedTechnician() { return assignedTechnician; }
+    public void setAssignedTechnician(Technician assignedTechnician) { this.assignedTechnician = assignedTechnician; }
+    public Category getCategory() { return category; }
+    public void setCategory(Category category) { this.category = category; }
+    public AffectedService getService() { return service; }
+    public void setService(AffectedService service) { this.service = service; }
+    public SlaPolicy getSlaPolicy() { return slaPolicy; }
+    public void setSlaPolicy(SlaPolicy slaPolicy) { this.slaPolicy = slaPolicy; }
     public String getDescription() { return description; }
     public void setDescription(String description) { this.description = description; }
-
-    public String getComponent() { return component; }
-    public void setComponent(String component) { this.component = component; }
-
-    public Classification getClassification() { return classification; }
-    public void setClassification(Classification classification) { this.classification = classification; }
-
-    public Reproducibility getReproducibility() { return reproducibility; }
-    public void setReproducibility(Reproducibility reproducibility) { this.reproducibility = reproducibility; }
-
+    public Impact getImpact() { return impact; }
+    public void setImpact(Impact impact) { this.impact = impact; }
+    public Urgency getUrgency() { return urgency; }
+    public void setUrgency(Urgency urgency) { this.urgency = urgency; }
+    public BusinessCriticality getBusinessCriticality() { return businessCriticality; }
+    public void setBusinessCriticality(BusinessCriticality businessCriticality) { this.businessCriticality = businessCriticality; }
     public Priority getPriority() { return priority; }
     public void setPriority(Priority priority) { this.priority = priority; }
-
-    public IncidentState getState() { return state; }
-    public void setState(IncidentState state) { this.state = state; }
-
-    public Resolution getResolution() { return resolution; }
-    public void setResolution(Resolution resolution) { this.resolution = resolution; }
-
-    public User getRequestor() { return requestor; }
-    public void setRequestor(User requestor) { this.requestor = requestor; }
-
-    public User getAssignee() { return assignee; }
-    public void setAssignee(User assignee) { this.assignee = assignee; }
-
-    public String getMilestone() { return milestone; }
-    public void setMilestone(String milestone) { this.milestone = milestone; }
-
-    public String getCategory() { return category; }
-    public void setCategory(String category) { this.category = category; }
-
-    public String getKeywords() { return keywords; }
-    public void setKeywords(String keywords) { this.keywords = keywords; }
-
-    public String getRootCause() { return rootCause; }
-    public void setRootCause(String rootCause) { this.rootCause = rootCause; }
-
+    public IncidentStatus getStatus() { return status; }
+    public void setStatus(IncidentStatus status) { this.status = status; }
+    public SlaStatus getSlaStatus() { return slaStatus; }
+    public void setSlaStatus(SlaStatus slaStatus) { this.slaStatus = slaStatus; }
+    public SlaObjectiveStatus getResponseSlaStatus() { return responseSlaStatus; }
+    public void setResponseSlaStatus(SlaObjectiveStatus responseSlaStatus) { this.responseSlaStatus = responseSlaStatus; }
+    public SlaObjectiveStatus getResolutionSlaStatus() { return resolutionSlaStatus; }
+    public void setResolutionSlaStatus(SlaObjectiveStatus resolutionSlaStatus) { this.resolutionSlaStatus = resolutionSlaStatus; }
+    public String getInvestigationDetails() { return investigationDetails; }
+    public void setInvestigationDetails(String investigationDetails) { this.investigationDetails = investigationDetails; }
+    public String getResolutionDetails() { return resolutionDetails; }
+    public void setResolutionDetails(String resolutionDetails) { this.resolutionDetails = resolutionDetails; }
+    public String getClosureDetails() { return closureDetails; }
+    public void setClosureDetails(String closureDetails) { this.closureDetails = closureDetails; }
     public Instant getCreatedAt() { return createdAt; }
-
-    public Instant getUpdatedAt() { return updatedAt; }
-    public void setUpdatedAt(Instant updatedAt) { this.updatedAt = updatedAt; }
-
+    public Instant getFirstResponseAt() { return firstResponseAt; }
+    public void setFirstResponseAt(Instant firstResponseAt) { this.firstResponseAt = firstResponseAt; }
+    public Instant getResolvedAt() { return resolvedAt; }
+    public void setResolvedAt(Instant resolvedAt) { this.resolvedAt = resolvedAt; }
+    public Instant getClosedAt() { return closedAt; }
+    public void setClosedAt(Instant closedAt) { this.closedAt = closedAt; }
+    public Instant getResponseDeadline() { return responseDeadline; }
+    public void setResponseDeadline(Instant responseDeadline) { this.responseDeadline = responseDeadline; }
+    public Instant getResolutionDeadline() { return resolutionDeadline; }
+    public void setResolutionDeadline(Instant resolutionDeadline) { this.resolutionDeadline = resolutionDeadline; }
     public List<Comment> getComments() { return comments; }
 }

@@ -1,5 +1,7 @@
 package com.incident.backend.dto;
 
-// assigneeId = null means "unassign"
-public record AssignRequest(Long assigneeId) {
+import com.fasterxml.jackson.annotation.JsonAlias;
+
+// technicianId = null means "unassign"
+public record AssignRequest(@JsonAlias("assigneeId") Long technicianId) {
 }

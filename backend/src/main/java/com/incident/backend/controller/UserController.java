@@ -2,6 +2,7 @@ package com.incident.backend.controller;
 
 import com.incident.backend.dto.UpdateRoleRequest;
 import com.incident.backend.dto.UserResponse;
+import com.incident.backend.dto.TechnicianResponse;
 import com.incident.backend.security.UserPrincipal;
 import com.incident.backend.service.UserService;
 import jakarta.validation.Valid;
@@ -36,7 +37,7 @@ public class UserController {
 
     @GetMapping("/assignees")
     @PreAuthorize("hasAnyRole('TECHNICIAN','ADMIN')")
-    public List<UserResponse> assignees() {
+    public List<TechnicianResponse> assignees() {
         return userService.assignees();
     }
 

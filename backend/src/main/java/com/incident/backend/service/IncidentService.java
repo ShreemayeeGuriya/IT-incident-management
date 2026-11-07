@@ -1,91 +1,117 @@
 package com.incident.backend.service;
 
-import com.incident.backend.dto.IncidentCreateRequest;
-import com.incident.backend.dto.IncidentResponse;
-import com.incident.backend.dto.IncidentUpdateRequest;
-import com.incident.backend.dto.PageResponse;
+import com.incident.backend.dto.*;
+import com.incident.backend.events.IncidentCreatedEvent;
+import com.incident.backend.events.IncidentUpdatedEvent;
 import com.incident.backend.exception.BadRequestException;
-import com.incident.backend.model.Incident;
-import com.incident.backend.model.IncidentState;
-import com.incident.backend.model.Priority;
-import com.incident.backend.model.User;
-import com.incident.backend.repository.IncidentRepository;
-import com.incident.backend.repository.UserRepository;
+import com.incident.backend.exception.ConflictException;
+import com.incident.backend.exception.ResourceNotFoundException;
+import com.incident.backend.model.*;
+import com.incident.backend.repository.*;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Set;
+import java.time.Instant;
+import java.util.LinkedHashMap;
+import java.util.Map;
+import java.util.UUID;
 
 @Service
 @Transactional
 public class IncidentService {
-
-    private static final Set<String> SORT_FIELDS =
-            Set.of("updatedAt", "createdAt", "priority", "state", "title", "id");
+    private static final Set<String> SORT_FIELDS = Set.of("createdAt", "priority", "status", "description", "id");
 
     private final IncidentRepository incidentRepository;
     private final UserRepository userRepository;
+    private final CategoryRepository categoryRepository;
+    private final AffectedServiceRepository serviceRepository;
+    private final SlaService slaService;
     private final IncidentAccess access;
+    private final ApplicationEventPublisher eventPublisher;
+    private final AuditLogRepository auditLogRepository;
 
     public IncidentService(IncidentRepository incidentRepository, UserRepository userRepository,
-                           IncidentAccess access) {
+                           CategoryRepository categoryRepository, AffectedServiceRepository serviceRepository,
+                           SlaService slaService, IncidentAccess access,
+                           ApplicationEventPublisher eventPublisher, AuditLogRepository auditLogRepository) {
         this.incidentRepository = incidentRepository;
         this.userRepository = userRepository;
+        this.categoryRepository = categoryRepository;
+        this.serviceRepository = serviceRepository;
+        this.slaService = slaService;
         this.access = access;
+        this.eventPublisher = eventPublisher;
+        this.auditLogRepository = auditLogRepository;
     }
 
-    public IncidentResponse create(IncidentCreateRequest r, User current) {
-        Incident i = new Incident();
-        i.setTitle(r.title().trim());
-        i.setDescription(r.description().trim());
-        i.setComponent(r.component());
-        i.setClassification(r.classification());
-        i.setReproducibility(r.reproducibility());
-        i.setMilestone(r.milestone());
-        i.setCategory(r.category());
-        i.setKeywords(r.keywords());
-        i.setRequestor(userRepository.getReferenceById(current.getId()));
-        return IncidentResponse.from(incidentRepository.save(i));
+    public IncidentResponse create(IncidentCreateRequest request, User current) {
+        Category category = category(request.categoryId());
+        AffectedService service = service(request.serviceId());
+        SlaPolicy policy = slaService.resolvePolicy(request.priority(), request.slaPolicyId());
+
+        Incident incident = new Incident();
+        incident.setReporter(userRepository.getReferenceById(current.getId()));
+        incident.setCategory(category);
+        incident.setService(service);
+        incident.setSlaPolicy(policy);
+        incident.setDescription(request.description().trim());
+        incident.setImpact(request.impact());
+        incident.setUrgency(request.urgency());
+        incident.setBusinessCriticality(request.businessCriticality());
+        incident.setPriority(request.priority());
+        Incident saved = incidentRepository.saveAndFlush(incident);
+        SlaService.Deadlines deadlines = slaService.calculateDeadlines(saved.getCreatedAt(), policy);
+        saved.setResponseDeadline(deadlines.responseDeadline());
+        saved.setResolutionDeadline(deadlines.resolutionDeadline());
+        saved = incidentRepository.saveAndFlush(saved);
+        Map<String, String> snapshotValues = new LinkedHashMap<>();
+        snapshotValues.put("reporterId", current.getId().toString());
+        snapshotValues.put("categoryId", category.getId().toString());
+        snapshotValues.put("serviceId", service.getId().toString());
+        snapshotValues.put("priority", saved.getPriority().name());
+        snapshotValues.put("status", saved.getStatus().name());
+        snapshotValues.put("impact", saved.getImpact().name());
+        snapshotValues.put("urgency", saved.getUrgency().name());
+        snapshotValues.put("businessCriticality", saved.getBusinessCriticality().name());
+        if (policy != null) snapshotValues.put("slaPolicyId", policy.getId().toString());
+        snapshotValues.put("responseDeadline", saved.getResponseDeadline().toString());
+        snapshotValues.put("resolutionDeadline", saved.getResolutionDeadline().toString());
+        eventPublisher.publishEvent(new IncidentCreatedEvent(UUID.randomUUID(), saved.getId(), current.getId(),
+                Instant.now(), Map.of(), snapshotValues, "Incident created"));
+        return IncidentResponse.from(saved);
     }
 
     @Transactional(readOnly = true)
-    public PageResponse<IncidentResponse> list(Priority priority, IncidentState state, Long assigneeId,
-                                               String search, int page, int size,
-                                               String sortBy, String direction, User current) {
-        if (!SORT_FIELDS.contains(sortBy)) {
-            throw new BadRequestException("sortBy must be one of " + SORT_FIELDS);
-        }
+    public PageResponse<IncidentResponse> list(Priority priority, IncidentStatus status, Long technicianId,
+                                               String search, int page, int size, String sortBy,
+                                               String direction, User current) {
+        if (!SORT_FIELDS.contains(sortBy)) throw new BadRequestException("sortBy must be one of " + SORT_FIELDS);
         if (!direction.equalsIgnoreCase("asc") && !direction.equalsIgnoreCase("desc")) {
             throw new BadRequestException("direction must be asc or desc");
         }
-        if (page < 0) {
-            throw new BadRequestException("page must be 0 or more");
-        }
+        if (page < 0) throw new BadRequestException("page must be 0 or more");
         int pageSize = Math.min(Math.max(size, 1), 100);
 
         Specification<Incident> spec = (root, query, cb) -> cb.conjunction();
         if (!IncidentAccess.isStaff(current)) {
-            spec = spec.and((root, q, cb) -> cb.equal(root.get("requestor").get("id"), current.getId()));
+            spec = spec.and((root, q, cb) -> cb.equal(root.get("reporter").get("id"), current.getId()));
         }
-        if (priority != null) {
-            spec = spec.and((root, q, cb) -> cb.equal(root.get("priority"), priority));
-        }
-        if (state != null) {
-            spec = spec.and((root, q, cb) -> cb.equal(root.get("state"), state));
-        }
-        if (assigneeId != null) {
-            spec = spec.and((root, q, cb) -> cb.equal(root.get("assignee").get("id"), assigneeId));
+        if (priority != null) spec = spec.and((root, q, cb) -> cb.equal(root.get("priority"), priority));
+        if (status != null) spec = spec.and((root, q, cb) -> cb.equal(root.get("status"), status));
+        if (technicianId != null) {
+            int id = Math.toIntExact(technicianId);
+            spec = spec.and((root, q, cb) -> cb.equal(root.get("assignedTechnician").get("id"), id));
         }
         if (search != null && !search.isBlank()) {
             String pattern = "%" + search.trim().toLowerCase() + "%";
-            spec = spec.and((root, q, cb) -> cb.or(
-                    cb.like(cb.lower(root.get("title")), pattern),
-                    cb.like(cb.lower(root.get("description")), pattern)));
+            spec = spec.and((root, q, cb) -> cb.like(cb.lower(root.get("description")), pattern));
         }
 
         Sort.Direction dir = direction.equalsIgnoreCase("asc") ? Sort.Direction.ASC : Sort.Direction.DESC;
@@ -99,40 +125,139 @@ public class IncidentService {
         return IncidentResponse.from(access.requireViewable(id, current));
     }
 
-    public IncidentResponse update(Long id, IncidentUpdateRequest r, User current) {
-        Incident i = access.requireViewable(id, current);
+    public IncidentResponse update(Long id, IncidentUpdateRequest request, User current) {
+        Incident incident = access.requireViewableForUpdate(id, current);
+        Map<String, String> oldValues = new LinkedHashMap<>();
+        Map<String, String> newValues = new LinkedHashMap<>();
+        Set<String> changedFields = new java.util.LinkedHashSet<>();
+        Priority originalPriority = incident.getPriority();
+        SlaPolicy originalPolicy = incident.getSlaPolicy();
+        Instant originalResponseDeadline = incident.getResponseDeadline();
+        Instant originalResolutionDeadline = incident.getResolutionDeadline();
         boolean staff = IncidentAccess.isStaff(current);
-        if (!staff && (r.classification() != null || r.priority() != null || r.milestone() != null
-                || r.category() != null || r.keywords() != null || r.rootCause() != null)) {
-            throw new AccessDeniedException("Only a technician or admin can change classification, "
-                    + "priority, milestone, category, keywords or root cause");
+        if (!staff && hasStaffFields(request)) {
+            throw new AccessDeniedException("Only a technician or admin can change incident classification fields");
         }
-        if (r.title() != null) {
-            if (r.title().isBlank()) {
-                throw new BadRequestException("Title cannot be blank");
-            }
-            i.setTitle(r.title().trim());
+
+        if (request.description() != null) {
+            if (request.description().isBlank()) throw new BadRequestException("Description cannot be blank");
+            String next = request.description().trim();
+            trackRedactedText(oldValues, newValues, changedFields, "description",
+                    incident.getDescription(), next);
+            incident.setDescription(next);
         }
-        if (r.description() != null) {
-            if (r.description().isBlank()) {
-                throw new BadRequestException("Description cannot be blank");
-            }
-            i.setDescription(r.description().trim());
+        if (request.categoryId() != null) {
+            Category next = category(request.categoryId());
+            track(oldValues, newValues, changedFields, "categoryId", incident.getCategory().getId(), next.getId());
+            incident.setCategory(next);
         }
-        if (r.component() != null) i.setComponent(r.component());
-        if (r.reproducibility() != null) i.setReproducibility(r.reproducibility());
-        if (staff) {
-            if (r.classification() != null) i.setClassification(r.classification());
-            if (r.priority() != null) i.setPriority(r.priority());
-            if (r.milestone() != null) i.setMilestone(r.milestone());
-            if (r.category() != null) i.setCategory(r.category());
-            if (r.keywords() != null) i.setKeywords(r.keywords());
-            if (r.rootCause() != null) i.setRootCause(r.rootCause());
+        if (request.serviceId() != null) {
+            AffectedService next = service(request.serviceId());
+            track(oldValues, newValues, changedFields, "serviceId", incident.getService().getId(), next.getId());
+            incident.setService(next);
         }
-        return IncidentResponse.from(incidentRepository.saveAndFlush(i));
+        if (request.impact() != null) { track(oldValues, newValues, changedFields, "impact", incident.getImpact(), request.impact()); incident.setImpact(request.impact()); }
+        if (request.urgency() != null) { track(oldValues, newValues, changedFields, "urgency", incident.getUrgency(), request.urgency()); incident.setUrgency(request.urgency()); }
+        if (request.businessCriticality() != null) { track(oldValues, newValues, changedFields, "businessCriticality", incident.getBusinessCriticality(), request.businessCriticality()); incident.setBusinessCriticality(request.businessCriticality()); }
+        if (request.priority() != null) { track(oldValues, newValues, changedFields, "priority", incident.getPriority(), request.priority()); incident.setPriority(request.priority()); }
+        if (request.investigationDetails() != null) {
+            trackRedactedText(oldValues, newValues, changedFields, "investigationDetails",
+                    incident.getInvestigationDetails(), request.investigationDetails());
+            incident.setInvestigationDetails(request.investigationDetails());
+        }
+        if (request.resolutionDetails() != null) {
+            trackRedactedText(oldValues, newValues, changedFields, "resolutionDetails",
+                    incident.getResolutionDetails(), request.resolutionDetails());
+            incident.setResolutionDetails(request.resolutionDetails());
+        }
+        if (request.closureDetails() != null) {
+            trackRedactedText(oldValues, newValues, changedFields, "closureDetails",
+                    incident.getClosureDetails(), request.closureDetails());
+            incident.setClosureDetails(request.closureDetails());
+        }
+
+        boolean priorityChanged = originalPriority != incident.getPriority();
+        SlaPolicy effectivePolicy = originalPolicy;
+        if (request.slaPolicyId() != null) {
+            effectivePolicy = slaService.resolvePolicy(incident.getPriority(), request.slaPolicyId());
+        } else if (priorityChanged) {
+            effectivePolicy = slaService.resolvePolicy(incident.getPriority(), null);
+        }
+
+        boolean policyChanged = !java.util.Objects.equals(
+                originalPolicy == null ? null : originalPolicy.getId(),
+                effectivePolicy == null ? null : effectivePolicy.getId());
+        if (request.slaPolicyId() != null || priorityChanged) {
+            incident.setSlaPolicy(effectivePolicy);
+        }
+        if (policyChanged) {
+            track(oldValues, newValues, changedFields, "slaPolicyId",
+                    originalPolicy == null ? null : originalPolicy.getId(),
+                    effectivePolicy == null ? null : effectivePolicy.getId());
+        }
+
+        boolean recalculateDeadlines = priorityChanged || policyChanged;
+        if (recalculateDeadlines) {
+            SlaService.Deadlines deadlines = slaService.calculateDeadlines(incident.getCreatedAt(), effectivePolicy);
+            incident.setResponseDeadline(deadlines.responseDeadline());
+            incident.setResolutionDeadline(deadlines.resolutionDeadline());
+            track(oldValues, newValues, changedFields, "responseDeadline",
+                    originalResponseDeadline, deadlines.responseDeadline());
+            track(oldValues, newValues, changedFields, "resolutionDeadline",
+                    originalResolutionDeadline, deadlines.resolutionDeadline());
+        }
+
+        Incident saved = incidentRepository.saveAndFlush(incident);
+        if (!changedFields.isEmpty()) {
+            eventPublisher.publishEvent(new IncidentUpdatedEvent(UUID.randomUUID(), saved.getId(), current.getId(),
+                    Instant.now(), oldValues, newValues, "Changed fields: " + String.join(", ", changedFields)));
+        }
+        return IncidentResponse.from(saved);
+    }
+
+    private void track(Map<String, String> oldValues, Map<String, String> newValues, Set<String> fields,
+                       String field, Object oldValue, Object newValue) {
+        if (!java.util.Objects.equals(oldValue, newValue)) {
+            fields.add(field);
+            if (oldValue != null) oldValues.put(field, oldValue.toString());
+            if (newValue != null) newValues.put(field, newValue.toString());
+        }
+    }
+
+    private void trackRedactedText(Map<String, String> oldValues, Map<String, String> newValues,
+                                   Set<String> fields, String field, String oldValue, String newValue) {
+        if (!java.util.Objects.equals(oldValue, newValue)) {
+            fields.add(field);
+            oldValues.put(field, isEmptyText(oldValue) ? "EMPTY" : "PRESENT");
+            newValues.put(field, isEmptyText(newValue) ? "EMPTY" : "PRESENT");
+        }
+    }
+
+    private boolean isEmptyText(String value) {
+        return value == null || value.isBlank();
     }
 
     public void delete(Long id) {
-        incidentRepository.delete(access.findOrThrow(id));
+        Incident incident = access.findOrThrow(id);
+        if (auditLogRepository.countByIncidentId(incident.getId()) > 0) {
+            throw new ConflictException("Incident cannot be deleted because it has audit history");
+        }
+        incidentRepository.delete(incident);
     }
+
+    private boolean hasStaffFields(IncidentUpdateRequest r) {
+        return r.categoryId() != null || r.serviceId() != null || r.slaPolicyId() != null
+                || r.impact() != null || r.urgency() != null || r.businessCriticality() != null
+                || r.priority() != null || r.investigationDetails() != null
+                || r.resolutionDetails() != null || r.closureDetails() != null;
+    }
+
+    private Category category(Integer id) {
+        return categoryRepository.findById(id).orElseThrow(() -> new ResourceNotFoundException("Category not found: " + id));
+    }
+
+    private AffectedService service(Integer id) {
+        return serviceRepository.findById(id).orElseThrow(() -> new ResourceNotFoundException("Service not found: " + id));
+    }
+
 }

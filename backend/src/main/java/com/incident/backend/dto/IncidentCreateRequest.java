@@ -1,31 +1,22 @@
 package com.incident.backend.dto;
 
-import com.incident.backend.model.Classification;
-import com.incident.backend.model.Reproducibility;
+import com.incident.backend.model.*;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
+import jakarta.validation.constraints.Positive;
 
 public record IncidentCreateRequest(
-        @NotBlank(message = "Title is required")
-        @Size(max = 200, message = "Title must be at most 200 characters")
-        String title,
-
         @NotBlank(message = "Description is required")
-        @Size(max = 5000, message = "Description must be at most 5000 characters")
+        @Size(max = 10000, message = "Description must be at most 10000 characters")
         String description,
 
-        @Size(max = 100, message = "Component must be at most 100 characters")
-        String component,
+        @NotNull(message = "Category is required") @Positive Integer categoryId,
+        @NotNull(message = "Service is required") @Positive Integer serviceId,
+        @Positive Integer slaPolicyId,
 
-        Classification classification,
-        Reproducibility reproducibility,
-
-        @Size(max = 100, message = "Milestone must be at most 100 characters")
-        String milestone,
-
-        @Size(max = 100, message = "Category must be at most 100 characters")
-        String category,
-
-        @Size(max = 300, message = "Keywords must be at most 300 characters")
-        String keywords) {
+        @NotNull(message = "Impact is required") Impact impact,
+        @NotNull(message = "Urgency is required") Urgency urgency,
+        @NotNull(message = "Business criticality is required") BusinessCriticality businessCriticality,
+        @NotNull(message = "Priority is required") Priority priority) {
 }

@@ -28,7 +28,7 @@ public class JwtService {
         Date now = new Date();
         return Jwts.builder()
                 .subject(user.getEmail())
-                .claim("role", user.getRole().name())
+                .claim("role", user.getRole().toApiValue())
                 .issuedAt(now)
                 .expiration(new Date(now.getTime() + expirationMs))
                 .signWith(key)

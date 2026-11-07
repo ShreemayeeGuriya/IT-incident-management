@@ -1,41 +1,46 @@
 package com.incident.backend.dto;
 
-import com.incident.backend.model.Classification;
 import com.incident.backend.model.Incident;
-import com.incident.backend.model.IncidentState;
-import com.incident.backend.model.Priority;
-import com.incident.backend.model.Reproducibility;
-import com.incident.backend.model.Resolution;
-
+import com.incident.backend.model.*;
 import java.time.Instant;
 
 public record IncidentResponse(
         Long id,
-        String title,
+        UserResponse reporter,
+        TechnicianResponse assignedTechnician,
+        CategoryResponse category,
+        ServiceResponse service,
+        SlaPolicyResponse slaPolicy,
         String description,
-        String component,
-        Classification classification,
-        Reproducibility reproducibility,
+        Impact impact,
+        Urgency urgency,
+        BusinessCriticality businessCriticality,
         Priority priority,
-        IncidentState state,
-        Resolution resolution,
-        UserResponse requestor,
-        UserResponse assignee,
-        String milestone,
-        String category,
-        String keywords,
-        String rootCause,
+        IncidentStatus status,
+        SlaStatus slaStatus,
+        SlaObjectiveStatus responseSlaStatus,
+        SlaObjectiveStatus resolutionSlaStatus,
+        String investigationDetails,
+        String resolutionDetails,
+        String closureDetails,
         Instant createdAt,
-        Instant updatedAt) {
+        Instant firstResponseAt,
+        Instant resolvedAt,
+        Instant closedAt,
+        Instant responseDeadline,
+        Instant resolutionDeadline) {
 
     public static IncidentResponse from(Incident i) {
         return new IncidentResponse(
-                i.getId(), i.getTitle(), i.getDescription(), i.getComponent(),
-                i.getClassification(), i.getReproducibility(), i.getPriority(),
-                i.getState(), i.getResolution(),
-                UserResponse.from(i.getRequestor()),
-                i.getAssignee() == null ? null : UserResponse.from(i.getAssignee()),
-                i.getMilestone(), i.getCategory(), i.getKeywords(), i.getRootCause(),
-                i.getCreatedAt(), i.getUpdatedAt());
+                i.getId().longValue(), UserResponse.from(i.getReporter()),
+                i.getAssignedTechnician() == null ? null : TechnicianResponse.from(i.getAssignedTechnician()),
+                CategoryResponse.from(i.getCategory()), ServiceResponse.from(i.getService()),
+                i.getSlaPolicy() == null ? null : SlaPolicyResponse.from(i.getSlaPolicy()),
+                i.getDescription(), i.getImpact(), i.getUrgency(), i.getBusinessCriticality(),
+                i.getPriority(), i.getStatus(), i.getSlaStatus(), i.getResponseSlaStatus(),
+                i.getResolutionSlaStatus(), i.getInvestigationDetails(),
+                i.getResolutionDetails(), i.getClosureDetails(), i.getCreatedAt(),
+                i.getFirstResponseAt(), i.getResolvedAt(), i.getClosedAt(),
+                i.getResponseDeadline(), i.getResolutionDeadline());
     }
 }

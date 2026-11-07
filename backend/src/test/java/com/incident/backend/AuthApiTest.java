@@ -2,6 +2,8 @@ package com.incident.backend;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.incident.backend.model.Role;
+import com.incident.backend.repository.UserRepository;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -10,13 +12,19 @@ import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 
 @SpringBootTest(properties = {
         "spring.datasource.url=jdbc:h2:mem:testdb;DB_CLOSE_DELAY=-1",
-        "spring.jpa.hibernate.ddl-auto=create-drop"
+        "spring.jpa.hibernate.ddl-auto=create-drop",
+        "app.admin.email=admin@incident.local",
+        "app.admin.password=Admin@12345"
 })
 @AutoConfigureMockMvc
 class AuthApiTest {
@@ -28,6 +36,9 @@ class AuthApiTest {
 
     @Autowired
     private ObjectMapper mapper;
+
+    @Autowired
+    private UserRepository userRepository;
 
     private String uniqueEmail() {
         return "user" + System.nanoTime() + "@test.com";
@@ -80,6 +91,24 @@ class AuthApiTest {
     }
 
     @Test
+    void registrationPersistsEmployeeRoleAndBCryptHashButKeepsLegacyApiRole() throws Exception {
+        String email = uniqueEmail();
+        String body = mvc.perform(post("/api/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(registerJson(email, PASSWORD)))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+
+        JsonNode response = mapper.readTree(body);
+        assertEquals("USER", response.path("user").path("role").asText());
+
+        var user = userRepository.findByEmail(email).orElseThrow();
+        assertEquals(Role.EMPLOYEE, user.getRole());
+        assertNotEquals(PASSWORD, user.getPasswordHash());
+        assertTrue(user.getPasswordHash().startsWith("$2"));
+    }
+
+    @Test
     void duplicateEmailIsRejectedWith409() throws Exception {
         String email = uniqueEmail();
         register(email);
@@ -116,7 +145,8 @@ class AuthApiTest {
     void meEndpointWorksWithToken() throws Exception {
         mvc.perform(get("/api/auth/me")
                         .header("Authorization", "Bearer " + userToken()))
-                .andExpect(status().isOk());
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.role").value("USER"));
     }
 
     @Test

@@ -8,7 +8,7 @@ public record CommentResponse(Long id, Long incidentId, UserResponse author,
                               String text, Instant createdAt) {
 
     public static CommentResponse from(Comment c) {
-        return new CommentResponse(c.getId(), c.getIncident().getId(),
+        return new CommentResponse(c.getId().longValue(), c.getIncident().getId().longValue(),
                 UserResponse.from(c.getAuthor()), c.getText(), c.getCreatedAt());
     }
 }

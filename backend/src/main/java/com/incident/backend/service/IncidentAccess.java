@@ -23,15 +23,30 @@ public class IncidentAccess {
     }
 
     public Incident findOrThrow(Long id) {
-        return incidentRepository.findById(id)
+        return incidentRepository.findById(Math.toIntExact(id))
+                .orElseThrow(() -> new ResourceNotFoundException("Incident not found: " + id));
+    }
+
+    public Incident findForUpdate(Long id) {
+        return incidentRepository.findByIdForUpdate(Math.toIntExact(id))
                 .orElseThrow(() -> new ResourceNotFoundException("Incident not found: " + id));
     }
 
     public Incident requireViewable(Long id, User current) {
         Incident incident = findOrThrow(id);
-        if (!isStaff(current) && !incident.getRequestor().getId().equals(current.getId())) {
+        assertViewable(incident, current);
+        return incident;
+    }
+
+    public Incident requireViewableForUpdate(Long id, User current) {
+        Incident incident = findForUpdate(id);
+        assertViewable(incident, current);
+        return incident;
+    }
+
+    private void assertViewable(Incident incident, User current) {
+        if (!isStaff(current) && !incident.getReporter().getId().equals(current.getId())) {
             throw new AccessDeniedException("You can only access your own incidents");
         }
-        return incident;
     }
 }

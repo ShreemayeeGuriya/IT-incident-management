@@ -1,5 +1,5 @@
 package com.incident.backend.model;
 
 public enum Priority {
-    NOT_SET, SHOW_STOPPER, EXPECTED, IMPORTANT, NICE_TO_HAVE, INVESTIGATE
+    P1, P2, P3, P4
 }
