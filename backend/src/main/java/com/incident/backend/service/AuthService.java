@@ -40,7 +40,7 @@ public class AuthService {
         user.setName(request.name().trim());
         user.setEmail(email);
         user.setPasswordHash(passwordEncoder.encode(request.password()));
-        user.setRole(Role.USER);
+        user.setRole(Role.EMPLOYEE);
         user = userRepository.save(user);
         return new AuthResponse(jwtService.generateToken(user), UserResponse.from(user));
     }

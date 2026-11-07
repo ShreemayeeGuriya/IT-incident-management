@@ -9,7 +9,8 @@ public class Comment {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
+    @Column(name = "comment_id")
+    private Integer id;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "incident_id", nullable = false)
@@ -19,10 +20,10 @@ public class Comment {
     @JoinColumn(name = "author_id", nullable = false)
     private User author;
 
-    @Column(nullable = false, length = 3000)
+    @Column(name = "text", nullable = false, length = 3000)
     private String text;
 
-    @Column(nullable = false, updatable = false)
+    @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
     @PrePersist
@@ -30,7 +31,7 @@ public class Comment {
         createdAt = Instant.now();
     }
 
-    public Long getId() { return id; }
+    public Integer getId() { return id; }
 
     public Incident getIncident() { return incident; }
     public void setIncident(Incident incident) { this.incident = incident; }

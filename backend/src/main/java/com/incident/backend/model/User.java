@@ -9,12 +9,13 @@ public class User {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
+    @Column(name = "user_id")
+    private Integer id;
 
     @Column(nullable = false, length = 100)
     private String name;
 
-    @Column(nullable = false, unique = true, length = 150)
+    @Column(nullable = false, unique = true, length = 255)
     private String email;
 
     @Column(nullable = false)
@@ -22,7 +23,7 @@ public class User {
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
-    private Role role = Role.USER;
+    private Role role = Role.EMPLOYEE;
 
     @Column(nullable = false, updatable = false)
     private Instant createdAt;
@@ -32,7 +33,7 @@ public class User {
         createdAt = Instant.now();
     }
 
-    public Long getId() { return id; }
+    public Integer getId() { return id; }
 
     public String getName() { return name; }
     public void setName(String name) { this.name = name; }

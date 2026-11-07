@@ -1,6 +1,7 @@
 package com.incident.backend.controller;
 
 import com.incident.backend.dto.AssignRequest;
+import com.incident.backend.dto.AuditHistoryResponse;
 import com.incident.backend.dto.CommentRequest;
 import com.incident.backend.dto.CommentResponse;
 import com.incident.backend.dto.IncidentCreateRequest;
@@ -8,10 +9,11 @@ import com.incident.backend.dto.IncidentResponse;
 import com.incident.backend.dto.IncidentUpdateRequest;
 import com.incident.backend.dto.PageResponse;
 import com.incident.backend.dto.StateChangeRequest;
-import com.incident.backend.model.IncidentState;
+import com.incident.backend.model.IncidentStatus;
 import com.incident.backend.model.Priority;
 import com.incident.backend.security.UserPrincipal;
 import com.incident.backend.service.CommentService;
+import com.incident.backend.service.AuditLogService;
 import com.incident.backend.service.IncidentService;
 import com.incident.backend.service.IncidentWorkflowService;
 import jakarta.validation.Valid;
@@ -39,13 +41,15 @@ public class IncidentController {
     private final IncidentService incidentService;
     private final IncidentWorkflowService workflowService;
     private final CommentService commentService;
+    private final AuditLogService auditLogService;
 
     public IncidentController(IncidentService incidentService,
                               IncidentWorkflowService workflowService,
-                              CommentService commentService) {
+                              CommentService commentService, AuditLogService auditLogService) {
         this.incidentService = incidentService;
         this.workflowService = workflowService;
         this.commentService = commentService;
+        this.auditLogService = auditLogService;
     }
 
     @PostMapping
@@ -57,15 +61,17 @@ public class IncidentController {
     @GetMapping
     public PageResponse<IncidentResponse> list(
             @RequestParam(required = false) Priority priority,
-            @RequestParam(required = false) IncidentState state,
+            @RequestParam(required = false) IncidentStatus status,
+            @RequestParam(required = false) Long technicianId,
             @RequestParam(required = false) Long assigneeId,
             @RequestParam(required = false) String search,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size,
-            @RequestParam(defaultValue = "updatedAt") String sortBy,
+            @RequestParam(defaultValue = "createdAt") String sortBy,
             @RequestParam(defaultValue = "desc") String direction,
             @AuthenticationPrincipal UserPrincipal p) {
-        return incidentService.list(priority, state, assigneeId, search, page, size,
+        Long assignmentFilter = technicianId != null ? technicianId : assigneeId;
+        return incidentService.list(priority, status, assignmentFilter, search, page, size,
                 sortBy, direction, p.getUser());
     }
 
@@ -83,15 +89,17 @@ public class IncidentController {
 
     @PatchMapping("/{id}/assign")
     @PreAuthorize("hasAnyRole('TECHNICIAN','ADMIN')")
-    public IncidentResponse assign(@PathVariable Long id, @RequestBody AssignRequest request) {
-        return workflowService.assign(id, request.assigneeId());
+    public IncidentResponse assign(@PathVariable Long id, @RequestBody AssignRequest request,
+                                   @AuthenticationPrincipal UserPrincipal p) {
+        return workflowService.assign(id, request.technicianId(), p.getUser());
     }
 
-    @PatchMapping("/{id}/state")
+    @PatchMapping({"/{id}/status", "/{id}/state"})
     @PreAuthorize("hasAnyRole('TECHNICIAN','ADMIN')")
     public IncidentResponse changeState(@PathVariable Long id,
-                                        @Valid @RequestBody StateChangeRequest request) {
-        return workflowService.changeState(id, request);
+                                        @Valid @RequestBody StateChangeRequest request,
+                                        @AuthenticationPrincipal UserPrincipal p) {
+        return workflowService.changeState(id, request, p.getUser());
     }
 
     @DeleteMapping("/{id}")
@@ -104,6 +112,12 @@ public class IncidentController {
     @GetMapping("/{id}/comments")
     public List<CommentResponse> comments(@PathVariable Long id, @AuthenticationPrincipal UserPrincipal p) {
         return commentService.list(id, p.getUser());
+    }
+
+    @GetMapping("/{id}/audit")
+    public List<AuditHistoryResponse> auditHistory(@PathVariable Long id,
+                                                   @AuthenticationPrincipal UserPrincipal p) {
+        return auditLogService.history(id, p.getUser()).stream().map(AuditHistoryResponse::from).toList();
     }
 
     @PostMapping("/{id}/comments")
