@@ -239,8 +239,15 @@ class PostgresIncidentAlignmentIT {
         Technician secondTechnician = technicianRepository.findByUserId(secondTechUser.getId()).orElseThrow();
         workflowService.assign(created.id(), secondTechnician.getId().longValue(), admin);
         workflowService.assign(created.id(), null, admin);
+        // Walk the full lifecycle; assigning a PRIORITIZED incident moves it to ASSIGNED automatically.
+        workflowService.changeState(created.id(), new StateChangeRequest(IncidentStatus.CLASSIFIED), admin);
+        workflowService.changeState(created.id(), new StateChangeRequest(IncidentStatus.PRIORITIZED), admin);
+        workflowService.assign(created.id(), technician.getId().longValue(), admin);
         workflowService.changeState(created.id(), new StateChangeRequest(IncidentStatus.INVESTIGATING), admin);
+        incidentService.update(created.id(), new IncidentUpdateRequest(null, null, null, null, null, null, null,
+                null, null, "Restarted the affected service", null), admin);
         workflowService.changeState(created.id(), new StateChangeRequest(IncidentStatus.RESOLVED), admin);
+        workflowService.changeState(created.id(), new StateChangeRequest(IncidentStatus.VERIFIED), admin);
         workflowService.changeState(created.id(), new StateChangeRequest(IncidentStatus.CLOSED), admin);
         commentService.add(created.id(), "Audit comment body must not be copied", reporter);
 
@@ -248,7 +255,10 @@ class PostgresIncidentAlignmentIT {
                 .findByIncidentIdOrderByTimestampAscIdAsc(Math.toIntExact(created.id()));
         assertEquals(List.of("INCIDENT_CREATED", "INCIDENT_UPDATED", "INCIDENT_UPDATED", "TECHNICIAN_ASSIGNMENT_CHANGED",
                         "TECHNICIAN_ASSIGNMENT_CHANGED", "TECHNICIAN_ASSIGNMENT_CHANGED",
-                        "INCIDENT_STATUS_CHANGED", "INCIDENT_RESOLVED", "INCIDENT_CLOSED", "COMMENT_CREATED"),
+                        "INCIDENT_STATUS_CHANGED", "INCIDENT_STATUS_CHANGED",
+                        "TECHNICIAN_ASSIGNMENT_CHANGED", "INCIDENT_STATUS_CHANGED",
+                        "INCIDENT_STATUS_CHANGED", "INCIDENT_UPDATED", "INCIDENT_RESOLVED",
+                        "INCIDENT_STATUS_CHANGED", "INCIDENT_CLOSED", "COMMENT_CREATED"),
                 history.stream().map(AuditLog::getAction).toList());
         assertTrue(history.get(3).getOldValue() == null);
         assertTrue(history.get(3).getNewValue().contains(technician.getId().toString()));
@@ -257,10 +267,15 @@ class PostgresIncidentAlignmentIT {
         assertTrue(history.get(5).getOldValue().contains(secondTechnician.getId().toString()));
         assertNull(history.get(5).getNewValue());
         assertTrue(history.get(6).getOldValue().contains("REPORTED"));
-        assertTrue(history.get(6).getNewValue().contains("INVESTIGATING"));
-        assertTrue(history.get(7).getNewValue().contains("RESOLVED"));
-        assertTrue(history.get(8).getNewValue().contains("CLOSED"));
-        assertFalse(history.get(9).getNewValue().contains("Audit comment body"));
+        assertTrue(history.get(6).getNewValue().contains("CLASSIFIED"));
+        assertTrue(history.get(7).getNewValue().contains("PRIORITIZED"));
+        assertTrue(history.get(9).getOldValue().contains("PRIORITIZED"));
+        assertTrue(history.get(9).getNewValue().contains("ASSIGNED"));
+        assertTrue(history.get(10).getNewValue().contains("INVESTIGATING"));
+        assertTrue(history.get(12).getNewValue().contains("RESOLVED"));
+        assertTrue(history.get(13).getNewValue().contains("VERIFIED"));
+        assertTrue(history.get(14).getNewValue().contains("CLOSED"));
+        assertFalse(history.get(15).getNewValue().contains("Audit comment body"));
         for (int i = 1; i < history.size(); i++) {
             assertFalse(history.get(i).getTimestamp().isBefore(history.get(i - 1).getTimestamp()));
         }

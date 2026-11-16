@@ -36,6 +36,16 @@ public class GlobalExceptionHandler {
         return build(HttpStatus.BAD_REQUEST, message);
     }
 
+    @ExceptionHandler(InvalidStateTransitionException.class)
+    public ResponseEntity<ApiError> invalidTransition(InvalidStateTransitionException ex) {
+        Map<String, String> details = new LinkedHashMap<>();
+        details.put("from", ex.getFrom().name());
+        details.put("to", ex.getTo().name());
+        details.put("allowedNext", ex.getAllowed().toString());
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(ApiError.of(409, HttpStatus.CONFLICT.getReasonPhrase(), ex.getMessage(), details));
+    }
+
     @ExceptionHandler(ConflictException.class)
     public ResponseEntity<ApiError> conflict(ConflictException ex) {
         return build(HttpStatus.CONFLICT, ex.getMessage());
