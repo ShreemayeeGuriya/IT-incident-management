@@ -12,7 +12,7 @@ BEGIN
       INTO missing_items
       FROM (VALUES
           ('users'), ('technicians'), ('skills'), ('technician_skills'),
-          ('categories'), ('services'), ('sla_policies'), ('incidents'),
+          ('categories'), ('services'), ('sla_policies'), ('incidents'), ('incident_escalations'),
           ('comments'), ('audit_logs'), ('notifications')
       ) AS e(table_name)
      WHERE to_regclass('public.' || quote_ident(e.table_name)) IS NULL;
@@ -35,6 +35,9 @@ BEGIN
           ('incidents','sla_status'), ('incidents','response_sla_status'), ('incidents','resolution_sla_status'), ('incidents','investigation_details'),
           ('incidents','resolution_details'), ('incidents','closure_details'), ('incidents','created_at'), ('incidents','first_response_at'), ('incidents','resolved_at'),
           ('incidents','closed_at'), ('incidents','response_deadline'), ('incidents','resolution_deadline'),
+          ('incident_escalations','escalation_id'), ('incident_escalations','incident_id'),
+          ('incident_escalations','escalation_level'), ('incident_escalations','trigger_objective'),
+          ('incident_escalations','created_at'),
           ('comments','comment_id'), ('comments','incident_id'), ('comments','author_id'), ('comments','text'), ('comments','created_at'),
           ('audit_logs','audit_id'), ('audit_logs','incident_id'), ('audit_logs','actor_user_id'), ('audit_logs','action'), ('audit_logs','old_value'),
           ('audit_logs','new_value'), ('audit_logs','description'), ('audit_logs','timestamp'),
@@ -67,6 +70,10 @@ BEGIN
           ('incidents','chk_incidents_impact','c'), ('incidents','chk_incidents_urgency','c'), ('incidents','chk_incidents_business_criticality','c'),
           ('incidents','chk_incidents_priority','c'), ('incidents','chk_incidents_status','c'), ('incidents','chk_incidents_sla_status','c'),
           ('incidents','chk_incidents_response_sla_status','c'), ('incidents','chk_incidents_resolution_sla_status','c'), ('incidents','chk_incidents_timestamps','c'),
+          ('incident_escalations','incident_escalations_pkey','p'),
+          ('incident_escalations','fk_incident_escalations_incident','f'),
+          ('incident_escalations','uq_incident_escalations_incident_level','u'),
+          ('incident_escalations','chk_incident_escalations_level_objective','c'),
           ('comments','comments_pkey','p'), ('comments','fk_comments_incident','f'), ('comments','fk_comments_author','f'),
           ('audit_logs','audit_logs_pkey','p'), ('audit_logs','fk_audit_logs_incident','f'), ('audit_logs','fk_audit_logs_actor','f'),
           ('notifications','notifications_pkey','p'), ('notifications','fk_notifications_user','f'), ('notifications','fk_notifications_incident','f'),
@@ -91,7 +98,8 @@ BEGIN
           ('idx_incidents_reporter'), ('idx_incidents_assigned_technician'), ('idx_incidents_category'),
           ('idx_incidents_service'), ('idx_incidents_sla_policy'), ('idx_incidents_created_at'),
           ('idx_incidents_status_priority'), ('idx_incidents_sla_status'), ('idx_incidents_response_deadline'),
-          ('idx_incidents_resolution_deadline'), ('idx_audit_logs_incident_timestamp'), ('idx_audit_logs_actor_timestamp'),
+          ('idx_incidents_resolution_deadline'), ('idx_incident_escalations_incident_created'),
+          ('idx_audit_logs_incident_timestamp'), ('idx_audit_logs_actor_timestamp'),
           ('idx_notifications_user_created'), ('idx_notifications_unread'), ('idx_notifications_incident'),
           ('uq_notifications_event_key'), ('idx_comments_incident_created_at')
       ) AS e(index_name)
