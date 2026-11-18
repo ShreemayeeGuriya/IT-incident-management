@@ -18,5 +18,5 @@ public record IncidentCreateRequest(
         @NotNull(message = "Impact is required") Impact impact,
         @NotNull(message = "Urgency is required") Urgency urgency,
         @NotNull(message = "Business criticality is required") BusinessCriticality businessCriticality,
-        @NotNull(message = "Priority is required") Priority priority) {
+        Priority priority) {
 }

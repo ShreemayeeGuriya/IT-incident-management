@@ -5,8 +5,12 @@ import com.incident.backend.events.IncidentCreatedEvent;
 import com.incident.backend.events.IncidentUpdatedEvent;
 import com.incident.backend.exception.BadRequestException;
 import com.incident.backend.exception.ConflictException;
+import com.incident.backend.exception.IncidentNotEligibleException;
 import com.incident.backend.exception.ResourceNotFoundException;
 import com.incident.backend.model.*;
+import com.incident.backend.priority.PriorityCalculator;
+import com.incident.backend.priority.PriorityInput;
+import com.incident.backend.priority.PriorityRecalculationPolicy;
 import com.incident.backend.repository.*;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -33,19 +37,21 @@ public class IncidentService {
     private final CategoryRepository categoryRepository;
     private final AffectedServiceRepository serviceRepository;
     private final SlaService slaService;
+    private final PriorityCalculator priorityCalculator;
     private final IncidentAccess access;
     private final ApplicationEventPublisher eventPublisher;
     private final AuditLogRepository auditLogRepository;
 
     public IncidentService(IncidentRepository incidentRepository, UserRepository userRepository,
                            CategoryRepository categoryRepository, AffectedServiceRepository serviceRepository,
-                           SlaService slaService, IncidentAccess access,
+                           SlaService slaService, PriorityCalculator priorityCalculator, IncidentAccess access,
                            ApplicationEventPublisher eventPublisher, AuditLogRepository auditLogRepository) {
         this.incidentRepository = incidentRepository;
         this.userRepository = userRepository;
         this.categoryRepository = categoryRepository;
         this.serviceRepository = serviceRepository;
         this.slaService = slaService;
+        this.priorityCalculator = priorityCalculator;
         this.access = access;
         this.eventPublisher = eventPublisher;
         this.auditLogRepository = auditLogRepository;
@@ -54,7 +60,13 @@ public class IncidentService {
     public IncidentResponse create(IncidentCreateRequest request, User current) {
         Category category = category(request.categoryId());
         AffectedService service = service(request.serviceId());
-        SlaPolicy policy = slaService.resolvePolicy(request.priority(), request.slaPolicyId());
+        Priority calculatedPriority = priorityCalculator.assess(new PriorityInput(
+                request.impact(), request.urgency(), request.businessCriticality())).priority();
+        if (request.priority() != null && request.priority() != calculatedPriority) {
+            throw new BadRequestException("Supplied priority " + request.priority()
+                    + " does not match calculated priority " + calculatedPriority);
+        }
+        SlaPolicy policy = slaService.resolvePolicy(calculatedPriority, request.slaPolicyId());
 
         Incident incident = new Incident();
         incident.setReporter(userRepository.getReferenceById(current.getId()));
@@ -65,7 +77,7 @@ public class IncidentService {
         incident.setImpact(request.impact());
         incident.setUrgency(request.urgency());
         incident.setBusinessCriticality(request.businessCriticality());
-        incident.setPriority(request.priority());
+        incident.setPriority(calculatedPriority);
         Incident saved = incidentRepository.saveAndFlush(incident);
         SlaService.Deadlines deadlines = slaService.calculateDeadlines(saved.getCreatedAt(), policy);
         saved.setResponseDeadline(deadlines.responseDeadline());
@@ -139,6 +151,44 @@ public class IncidentService {
             throw new AccessDeniedException("Only a technician or admin can change incident classification fields");
         }
 
+        Impact nextImpact = request.impact() == null ? incident.getImpact() : request.impact();
+        Urgency nextUrgency = request.urgency() == null ? incident.getUrgency() : request.urgency();
+        BusinessCriticality nextCriticality = request.businessCriticality() == null
+                ? incident.getBusinessCriticality() : request.businessCriticality();
+        boolean factorsChanged = nextImpact != incident.getImpact()
+                || nextUrgency != incident.getUrgency()
+                || nextCriticality != incident.getBusinessCriticality();
+        if (factorsChanged && PriorityRecalculationPolicy.isLocked(incident.getStatus())) {
+            throw new IncidentNotEligibleException("change classification factors", incident.getStatus(),
+                    "impact, urgency and business criticality are fixed once an incident is resolved");
+        }
+
+        Priority calculatedPriority = incident.getPriority();
+        if (factorsChanged || request.priority() != null) {
+            calculatedPriority = priorityCalculator.assess(
+                    new PriorityInput(nextImpact, nextUrgency, nextCriticality)).priority();
+            if (request.priority() != null && request.priority() != calculatedPriority) {
+                throw new BadRequestException("Supplied priority " + request.priority()
+                        + " does not match calculated priority " + calculatedPriority);
+            }
+        }
+        boolean priorityChanged = originalPriority != calculatedPriority;
+
+        // Resolve the resulting policy and deadlines before mutating the managed entity. This keeps
+        // validation failures from leaving an incident partially changed within the transaction.
+        SlaPolicy effectivePolicy = originalPolicy;
+        if (request.slaPolicyId() != null) {
+            effectivePolicy = slaService.resolvePolicy(calculatedPriority, request.slaPolicyId());
+        } else if (priorityChanged) {
+            effectivePolicy = slaService.resolvePolicy(calculatedPriority, null);
+        }
+        boolean policyChanged = !java.util.Objects.equals(
+                originalPolicy == null ? null : originalPolicy.getId(),
+                effectivePolicy == null ? null : effectivePolicy.getId());
+        boolean recalculateDeadlines = priorityChanged || policyChanged;
+        SlaService.Deadlines deadlines = recalculateDeadlines
+                ? slaService.calculateDeadlines(incident.getCreatedAt(), effectivePolicy) : null;
+
         if (request.description() != null) {
             if (request.description().isBlank()) throw new BadRequestException("Description cannot be blank");
             String next = request.description().trim();
@@ -156,10 +206,15 @@ public class IncidentService {
             track(oldValues, newValues, changedFields, "serviceId", incident.getService().getId(), next.getId());
             incident.setService(next);
         }
-        if (request.impact() != null) { track(oldValues, newValues, changedFields, "impact", incident.getImpact(), request.impact()); incident.setImpact(request.impact()); }
-        if (request.urgency() != null) { track(oldValues, newValues, changedFields, "urgency", incident.getUrgency(), request.urgency()); incident.setUrgency(request.urgency()); }
-        if (request.businessCriticality() != null) { track(oldValues, newValues, changedFields, "businessCriticality", incident.getBusinessCriticality(), request.businessCriticality()); incident.setBusinessCriticality(request.businessCriticality()); }
-        if (request.priority() != null) { track(oldValues, newValues, changedFields, "priority", incident.getPriority(), request.priority()); incident.setPriority(request.priority()); }
+        track(oldValues, newValues, changedFields, "impact", incident.getImpact(), nextImpact);
+        incident.setImpact(nextImpact);
+        track(oldValues, newValues, changedFields, "urgency", incident.getUrgency(), nextUrgency);
+        incident.setUrgency(nextUrgency);
+        track(oldValues, newValues, changedFields, "businessCriticality",
+                incident.getBusinessCriticality(), nextCriticality);
+        incident.setBusinessCriticality(nextCriticality);
+        track(oldValues, newValues, changedFields, "priority", originalPriority, calculatedPriority);
+        incident.setPriority(calculatedPriority);
         if (request.investigationDetails() != null) {
             trackRedactedText(oldValues, newValues, changedFields, "investigationDetails",
                     incident.getInvestigationDetails(), request.investigationDetails());
@@ -176,17 +231,6 @@ public class IncidentService {
             incident.setClosureDetails(request.closureDetails());
         }
 
-        boolean priorityChanged = originalPriority != incident.getPriority();
-        SlaPolicy effectivePolicy = originalPolicy;
-        if (request.slaPolicyId() != null) {
-            effectivePolicy = slaService.resolvePolicy(incident.getPriority(), request.slaPolicyId());
-        } else if (priorityChanged) {
-            effectivePolicy = slaService.resolvePolicy(incident.getPriority(), null);
-        }
-
-        boolean policyChanged = !java.util.Objects.equals(
-                originalPolicy == null ? null : originalPolicy.getId(),
-                effectivePolicy == null ? null : effectivePolicy.getId());
         if (request.slaPolicyId() != null || priorityChanged) {
             incident.setSlaPolicy(effectivePolicy);
         }
@@ -196,9 +240,7 @@ public class IncidentService {
                     effectivePolicy == null ? null : effectivePolicy.getId());
         }
 
-        boolean recalculateDeadlines = priorityChanged || policyChanged;
         if (recalculateDeadlines) {
-            SlaService.Deadlines deadlines = slaService.calculateDeadlines(incident.getCreatedAt(), effectivePolicy);
             incident.setResponseDeadline(deadlines.responseDeadline());
             incident.setResolutionDeadline(deadlines.resolutionDeadline());
             track(oldValues, newValues, changedFields, "responseDeadline",

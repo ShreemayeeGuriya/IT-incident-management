@@ -7,6 +7,7 @@ import com.incident.backend.assignment.SkillBasedAssignmentStrategy;
 import com.incident.backend.dto.IncidentCreateRequest;
 import com.incident.backend.dto.IncidentUpdateRequest;
 import com.incident.backend.dto.StateChangeRequest;
+import com.incident.backend.exception.BadRequestException;
 import com.incident.backend.exception.IncidentNotEligibleException;
 import com.incident.backend.exception.NoTechnicianAvailableException;
 import com.incident.backend.exception.TechnicianUnavailableException;
@@ -23,6 +24,8 @@ import com.incident.backend.service.UserService;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.api.condition.EnabledIfSystemProperty;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.jdbc.AutoConfigureTestDatabase;
@@ -154,20 +157,167 @@ class PostgresPriorityAssignmentIT {
     @Test
     @Rollback
     void recalculationRaisesPriorityAndMovesTheSlaDeadline() {
-        long id = incident("Network", Impact.HIGH, Urgency.HIGH, BusinessCriticality.HIGH, Priority.P4);
+        // The same factors produce P4 under weighted score and P3 under the matrix strategy.
+        long id = incident("Network", Impact.LOW, Urgency.LOW, BusinessCriticality.HIGH, Priority.P4);
+        priorityService.strategies().select(ImpactUrgencyMatrixPriorityStrategy.NAME);
         Instant oldDeadline = reload(id).getResolutionDeadline();
 
         PriorityService.Recalculation r = priorityService.recalculate(id, admin);
 
         assertTrue(r.changed());
-        assertEquals(Priority.P1, r.assessment().priority());
-        assertEquals(27, r.assessment().score());
+        assertEquals(Priority.P3, r.assessment().priority());
+        assertEquals(3, r.assessment().score());
         Incident incident = reload(id);
-        assertEquals(Priority.P1, incident.getPriority());
-        assertEquals(Priority.P1, incident.getSlaPolicy().getPriority());
-        assertTrue(incident.getResolutionDeadline().isBefore(oldDeadline), "P1 deadline is much sooner than P4");
+        assertEquals(Priority.P3, incident.getPriority());
+        assertEquals(Priority.P3, incident.getSlaPolicy().getPriority());
+        assertTrue(incident.getResolutionDeadline().isBefore(oldDeadline), "P3 deadline is sooner than P4");
         assertTrue(auditLogRepository.findByIncidentIdOrderByTimestampAscIdAsc(Math.toIntExact(id)).stream()
-                .anyMatch(a -> "INCIDENT_UPDATED".equals(a.getAction()) && a.getNewValue().contains("P1")));
+                .anyMatch(a -> "INCIDENT_UPDATED".equals(a.getAction()) && a.getNewValue().contains("P3")));
+    }
+
+    @Test
+    @Rollback
+    void creationCalculatesPriorityAndRejectsAnInconsistentSuppliedPriority() {
+        AffectedService service = serviceRepository.findAll(Sort.by("id")).get(0);
+        IncidentCreateRequest automatic = new IncidentCreateRequest("Automatic priority test",
+                category("Network").getId(), service.getId(), null, Impact.HIGH, Urgency.HIGH,
+                BusinessCriticality.HIGH, null);
+
+        long id = incidentService.create(automatic, admin).id();
+
+        Incident saved = reload(id);
+        assertEquals(Priority.P1, saved.getPriority());
+        assertEquals(Priority.P1, saved.getSlaPolicy().getPriority());
+        assertEquals(saved.getCreatedAt().plusSeconds(saved.getSlaPolicy().getResponseTimeMinutes() * 60L),
+                saved.getResponseDeadline());
+        assertEquals(saved.getCreatedAt().plusSeconds(saved.getSlaPolicy().getResolutionTimeMinutes() * 60L),
+                saved.getResolutionDeadline());
+
+        IncidentCreateRequest inconsistent = new IncidentCreateRequest("Inconsistent priority test",
+                category("Network").getId(), service.getId(), null, Impact.HIGH, Urgency.HIGH,
+                BusinessCriticality.HIGH, Priority.P4);
+        assertThrows(BadRequestException.class, () -> incidentService.create(inconsistent, admin));
+    }
+
+    @Test
+    @Rollback
+    void eachChangedClassificationFactorRecalculatesPriorityInPostgres() {
+        long impactId = incident("Network", Impact.MEDIUM, Urgency.MEDIUM,
+                BusinessCriticality.MEDIUM, Priority.P3);
+        incidentService.update(impactId, updateRequest(Impact.HIGH, null, null, null), admin);
+        assertEquals(Priority.P2, reload(impactId).getPriority());
+
+        long urgencyId = incident("Network", Impact.MEDIUM, Urgency.MEDIUM,
+                BusinessCriticality.MEDIUM, Priority.P3);
+        incidentService.update(urgencyId, updateRequest(null, Urgency.HIGH, null, null), admin);
+        assertEquals(Priority.P2, reload(urgencyId).getPriority());
+
+        long criticalityId = incident("Network", Impact.MEDIUM, Urgency.MEDIUM,
+                BusinessCriticality.MEDIUM, Priority.P3);
+        incidentService.update(criticalityId, updateRequest(null, null, BusinessCriticality.HIGH, null), admin);
+        assertEquals(Priority.P2, reload(criticalityId).getPriority());
+
+        long multipleId = incident("Network", Impact.MEDIUM, Urgency.MEDIUM,
+                BusinessCriticality.MEDIUM, Priority.P3);
+        incidentService.update(multipleId, updateRequest(Impact.HIGH, Urgency.HIGH,
+                BusinessCriticality.HIGH, null), admin);
+        assertEquals(Priority.P1, reload(multipleId).getPriority());
+    }
+
+    @Test
+    @Rollback
+    void unchangedCalculatedPriorityDoesNotAddPriorityToAuditSnapshot() {
+        long id = incident("Network", Impact.MEDIUM, Urgency.MEDIUM,
+                BusinessCriticality.MEDIUM, Priority.P3);
+
+        incidentService.update(id, updateRequest(Impact.LOW, null, null, null), admin);
+
+        assertEquals(Priority.P3, reload(id).getPriority());
+        AuditLog update = auditLogRepository.findByIncidentIdOrderByTimestampAscIdAsc(Math.toIntExact(id)).stream()
+                .filter(a -> "INCIDENT_UPDATED".equals(a.getAction())).findFirst().orElseThrow();
+        assertTrue(update.getNewValue().contains("impact"));
+        assertFalse(update.getOldValue() != null && update.getOldValue().contains("priority"));
+        assertFalse(update.getNewValue() != null && update.getNewValue().contains("priority"));
+    }
+
+    @Test
+    @Rollback
+    void priorityChangingUpdatePersistsAuditContextPolicyAndDeadlines() {
+        long id = incident("Network", Impact.MEDIUM, Urgency.MEDIUM,
+                BusinessCriticality.MEDIUM, Priority.P3);
+        Incident before = reload(id);
+        Instant oldResponseDeadline = before.getResponseDeadline();
+        Instant oldResolutionDeadline = before.getResolutionDeadline();
+        Instant beforeUpdate = Instant.now();
+
+        incidentService.update(id, updateRequest(Impact.HIGH, Urgency.HIGH,
+                BusinessCriticality.HIGH, null), admin);
+
+        Incident after = reload(id);
+        assertEquals(Priority.P1, after.getPriority());
+        assertEquals(Priority.P1, after.getSlaPolicy().getPriority());
+        assertEquals(after.getCreatedAt().plusSeconds(after.getSlaPolicy().getResponseTimeMinutes() * 60L),
+                after.getResponseDeadline());
+        assertEquals(after.getCreatedAt().plusSeconds(after.getSlaPolicy().getResolutionTimeMinutes() * 60L),
+                after.getResolutionDeadline());
+        assertTrue(after.getResponseDeadline().isBefore(oldResponseDeadline));
+        assertTrue(after.getResolutionDeadline().isBefore(oldResolutionDeadline));
+
+        AuditLog update = auditLogRepository.findByIncidentIdOrderByTimestampAscIdAsc(Math.toIntExact(id)).stream()
+                .filter(a -> "INCIDENT_UPDATED".equals(a.getAction()))
+                .filter(a -> a.getNewValue() != null && a.getNewValue().contains("P1"))
+                .findFirst().orElseThrow();
+        assertEquals("P3", extractAuditValue(update.getOldValue(), "priority"));
+        assertEquals("P1", extractAuditValue(update.getNewValue(), "priority"));
+        assertEquals(admin.getId(), update.getActor().getId());
+        assertEquals(Math.toIntExact(id), update.getIncident().getId());
+        assertNotNull(update.getTimestamp());
+        assertFalse(update.getTimestamp().isBefore(beforeUpdate));
+    }
+
+    @ParameterizedTest
+    @EnumSource(value = IncidentStatus.class, names = {"RESOLVED", "VERIFIED", "CLOSED"})
+    @Rollback
+    void factorChangeAndExplicitRecalculationAreRejectedInTerminalStates(IncidentStatus status) {
+        long id = incidentAtStatus(status);
+        Incident before = reload(id);
+
+        assertThrows(IncidentNotEligibleException.class,
+                () -> incidentService.update(id, updateRequest(Impact.HIGH, null, null, null), admin));
+        assertThrows(IncidentNotEligibleException.class, () -> priorityService.recalculate(id, admin));
+        assertEquals(before.getImpact(), reload(id).getImpact());
+        incidentService.update(id, new IncidentUpdateRequest("Terminal description update", null, null, null,
+                null, null, null, null, null, null, null), admin);
+        assertEquals("Terminal description update", reload(id).getDescription());
+    }
+
+    private IncidentUpdateRequest updateRequest(Impact impact, Urgency urgency,
+                                               BusinessCriticality criticality, Priority priority) {
+        return new IncidentUpdateRequest(null, null, null, null, impact, urgency, criticality,
+                priority, null, null, null);
+    }
+
+    private long incidentAtStatus(IncidentStatus target) {
+        Technician tech = technician("Network");
+        long id = prioritized("Network");
+        workflowService.assign(id, tech.getId().longValue(), admin);
+        workflowService.changeState(id, new StateChangeRequest(INVESTIGATING), admin);
+        incidentService.update(id, new IncidentUpdateRequest(null, null, null, null, null, null, null,
+                null, null, "Completed investigation", null), admin);
+        workflowService.changeState(id, new StateChangeRequest(RESOLVED), admin);
+        if (target == VERIFIED || target == CLOSED) {
+            workflowService.changeState(id, new StateChangeRequest(VERIFIED), admin);
+        }
+        if (target == CLOSED) workflowService.changeState(id, new StateChangeRequest(CLOSED), admin);
+        return id;
+    }
+
+    private String extractAuditValue(String json, String field) {
+        try {
+            return new com.fasterxml.jackson.databind.ObjectMapper().readTree(json).path(field).asText();
+        } catch (Exception exception) {
+            throw new AssertionError("Could not read audit snapshot", exception);
+        }
     }
 
     @Test
@@ -219,7 +369,7 @@ class PostgresPriorityAssignmentIT {
     @Rollback
     void onlyStaffCanRecalculateAndOnlyAdminsCanSwitchStrategy() throws Exception {
         User employee = user(Role.EMPLOYEE);
-        long id = incident("Network", Impact.HIGH, Urgency.HIGH, BusinessCriticality.HIGH, Priority.P4);
+        long id = incident("Network", Impact.HIGH, Urgency.HIGH, BusinessCriticality.HIGH, Priority.P1);
         mvc.perform(post("/api/incidents/{id}/priority/recalculate", id).header("Authorization", bearer(employee)))
                 .andExpect(status().isForbidden());
         mvc.perform(put("/api/priority/strategy").header("Authorization", bearer(employee))
@@ -332,6 +482,33 @@ class PostgresPriorityAssignmentIT {
         updateTechnician("availability_status = 'BUSY'", away.getId());
         assertThrows(NoTechnicianAvailableException.class, () -> assignmentService.autoAssign(prioritized("Network"), admin));
         assertThrows(TechnicianUnavailableException.class, () -> assignmentService.requireCanTake(away.getId()));
+    }
+
+    @Test
+    @Rollback
+    void manualAssignmentRejectsUnavailableTechnician() {
+        Technician away = technician("Network");
+        long incidentId = prioritized("Network");
+        updateTechnician("availability_status = 'BUSY'", away.getId());
+
+        assertThrows(TechnicianUnavailableException.class,
+                () -> workflowService.assign(incidentId, away.getId().longValue(), admin));
+        assertNull(reload(incidentId).getAssignedTechnician());
+        assertEquals(PRIORITIZED, reload(incidentId).getStatus());
+    }
+
+    @Test
+    @Rollback
+    void manualAssignmentRejectsTechnicianAtMaximumWorkload() {
+        Technician only = technician("Network");
+        updateTechnician("max_workload = 1", only.getId());
+        workflowService.assign(prioritized("Network"), only.getId().longValue(), admin);
+        long secondIncident = prioritized("Network");
+
+        assertThrows(TechnicianWorkloadExceededException.class,
+                () -> workflowService.assign(secondIncident, only.getId().longValue(), admin));
+        assertNull(reload(secondIncident).getAssignedTechnician());
+        assertEquals(PRIORITIZED, reload(secondIncident).getStatus());
     }
 
     @Test

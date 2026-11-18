@@ -4,18 +4,12 @@ import com.incident.backend.dto.IncidentResponse;
 import com.incident.backend.dto.IncidentUpdateRequest;
 import com.incident.backend.exception.IncidentNotEligibleException;
 import com.incident.backend.model.Incident;
-import com.incident.backend.model.IncidentStatus;
 import com.incident.backend.model.User;
 import com.incident.backend.service.IncidentAccess;
 import com.incident.backend.service.IncidentService;
 import com.incident.backend.strategy.StrategyRegistry;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-
-import java.util.EnumSet;
-import java.util.List;
-import java.util.Set;
 
 /**
  * Calculates incident priority with the active {@link PriorityStrategy}.
@@ -25,29 +19,22 @@ import java.util.Set;
  */
 @Service
 public class PriorityService {
-    /** Once an incident is resolved its priority is part of the record and is no longer recalculated. */
-    static final Set<IncidentStatus> LOCKED = EnumSet.of(
-            IncidentStatus.RESOLVED, IncidentStatus.VERIFIED, IncidentStatus.CLOSED);
-
-    private final StrategyRegistry<PriorityStrategy> registry;
+    private final PriorityCalculator calculator;
     private final IncidentAccess access;
     private final IncidentService incidentService;
 
-    public PriorityService(List<PriorityStrategy> strategies,
-                           @Value("${app.priority.strategy:" + WeightedScorePriorityStrategy.NAME + "}")
-                           String defaultStrategy,
-                           IncidentAccess access, IncidentService incidentService) {
-        this.registry = new StrategyRegistry<>("priority", strategies, defaultStrategy);
+    public PriorityService(PriorityCalculator calculator, IncidentAccess access, IncidentService incidentService) {
+        this.calculator = calculator;
         this.access = access;
         this.incidentService = incidentService;
     }
 
     public PriorityAssessment assess(PriorityInput input) {
-        return registry.active().assess(input);
+        return calculator.assess(input);
     }
 
     public StrategyRegistry<PriorityStrategy> strategies() {
-        return registry;
+        return calculator.strategies();
     }
 
     /** Calculates what the incident's priority should be, without changing it. */
@@ -65,7 +52,7 @@ public class PriorityService {
     @Transactional
     public Recalculation recalculate(Long incidentId, User actor) {
         Incident incident = access.requireViewableForUpdate(incidentId, actor);
-        if (LOCKED.contains(incident.getStatus())) {
+        if (PriorityRecalculationPolicy.isLocked(incident.getStatus())) {
             throw new IncidentNotEligibleException("recalculate priority", incident.getStatus(),
                     "priority is fixed once an incident is resolved");
         }

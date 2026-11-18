@@ -1,11 +1,12 @@
 package com.incident.backend.service;
 
+import com.incident.backend.assignment.AssignmentRules;
+import com.incident.backend.assignment.TechnicianCandidate;
 import com.incident.backend.dto.IncidentResponse;
 import com.incident.backend.dto.StateChangeRequest;
 import com.incident.backend.events.IncidentStatusChangedEvent;
 import com.incident.backend.events.TechnicianAssignmentChangedEvent;
 import com.incident.backend.exception.ResourceNotFoundException;
-import com.incident.backend.exception.BadRequestException;
 import com.incident.backend.exception.InvalidStateTransitionException;
 import com.incident.backend.lifecycle.IncidentLifecycle;
 import com.incident.backend.model.Incident;
@@ -14,6 +15,9 @@ import com.incident.backend.model.Technician;
 import com.incident.backend.model.User;
 import com.incident.backend.repository.IncidentRepository;
 import com.incident.backend.repository.TechnicianRepository;
+import com.incident.backend.assignment.TechnicianProfileRepository;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.LockModeType;
 import org.springframework.stereotype.Service;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.transaction.annotation.Transactional;
@@ -36,15 +40,23 @@ public class IncidentWorkflowService {
     private final IncidentAccess access;
     private final ApplicationEventPublisher eventPublisher;
     private final IncidentLifecycle lifecycle;
+    private final AssignmentRules assignmentRules;
+    private final TechnicianProfileRepository technicianProfiles;
+    private final EntityManager entityManager;
 
     public IncidentWorkflowService(IncidentRepository incidentRepository,
                                    TechnicianRepository technicianRepository, IncidentAccess access,
-                                   ApplicationEventPublisher eventPublisher, IncidentLifecycle lifecycle) {
+                                   ApplicationEventPublisher eventPublisher, IncidentLifecycle lifecycle,
+                                   AssignmentRules assignmentRules, TechnicianProfileRepository technicianProfiles,
+                                   EntityManager entityManager) {
         this.incidentRepository = incidentRepository;
         this.technicianRepository = technicianRepository;
         this.access = access;
         this.eventPublisher = eventPublisher;
         this.lifecycle = lifecycle;
+        this.assignmentRules = assignmentRules;
+        this.technicianProfiles = technicianProfiles;
+        this.entityManager = entityManager;
     }
 
     // technicianId == null means "unassign".
@@ -75,11 +87,18 @@ public class IncidentWorkflowService {
             if (lifecycle.currentState(incident).isTerminal()) {
                 throw InvalidStateTransitionException.cannotAssign(status);
             }
-            Technician technician = technicianRepository.findById(Math.toIntExact(technicianId))
+            // Keep lock order consistent: incident first (above), then technician. The row lock
+            // serializes competing assignments to different incidents for this technician.
+            Technician technician = technicianRepository.findByIdForUpdate(Math.toIntExact(technicianId))
                     .orElseThrow(() -> new ResourceNotFoundException("Technician not found: " + technicianId));
-            if (technician.getUser().getRole() != com.incident.backend.model.Role.TECHNICIAN) {
-                throw new BadRequestException("The selected technician profile is not active");
-            }
+            // The candidate may already be in the persistence context from auto-assignment's
+            // strategy scan. Refresh after locking so eligibility uses current database values.
+            entityManager.refresh(technician, LockModeType.PESSIMISTIC_WRITE);
+            entityManager.refresh(technician.getUser());
+            long activeIncidents = technicianProfiles.activeIncidentCount(technician.getId());
+            // Re-assigning the same technician does not consume another workload slot.
+            if (Objects.equals(oldTechnicianId, technician.getId())) activeIncidents--;
+            assignmentRules.requireCanTake(new TechnicianCandidate(technician, activeIncidents, Set.of()));
             incident.setAssignedTechnician(technician);
             if (status == IncidentStatus.PRIORITIZED) nextStatus = IncidentStatus.ASSIGNED;
         }

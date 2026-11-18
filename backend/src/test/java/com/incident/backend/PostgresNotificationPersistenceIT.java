@@ -48,7 +48,7 @@ class PostgresNotificationPersistenceIT {
     private IncidentCreateRequest incidentRequest() {
         Category category = categoryRepository.findAll(Sort.by("id")).get(0);
         AffectedService service = serviceRepository.findAll(Sort.by("id")).get(0);
-        SlaPolicy policy = slaPolicyRepository.findAll(Sort.by("id")).get(0);
+        SlaPolicy policy = slaPolicyRepository.findByPriority(Priority.P3).orElseThrow();
         return new IncidentCreateRequest("Notification persistence fixture", category.getId(), service.getId(),
                 policy.getId(), Impact.MEDIUM, Urgency.MEDIUM, BusinessCriticality.MEDIUM, policy.getPriority());
     }

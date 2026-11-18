@@ -349,9 +349,12 @@ class PostgresIncidentAlignmentIT {
         User technicianUser = user(Role.EMPLOYEE);
         userService.updateRole(technicianUser.getId().longValue(), Role.TECHNICIAN, admin);
         Technician technician = technicianRepository.findByUserId(technicianUser.getId()).orElseThrow();
-        mvc.perform(get("/api/users/assignees").header("Authorization", "Bearer " + token))
+        JsonNode assignees = objectMapper.readTree(mvc.perform(
+                        get("/api/users/assignees").header("Authorization", "Bearer " + token))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$[0].id").value(technician.getId()));
+                .andReturn().getResponse().getContentAsString());
+        assertTrue(assignees.findValuesAsText("id").contains(technician.getId().toString()),
+                "assignee list should include the technician created by this test");
         mvc.perform(patch("/api/incidents/{id}/assign", incidentId)
                         .header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)

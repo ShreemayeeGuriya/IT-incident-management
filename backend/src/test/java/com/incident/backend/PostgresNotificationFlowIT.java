@@ -91,7 +91,7 @@ class PostgresNotificationFlowIT {
     private IncidentCreateRequest request() {
         Category category = categoryRepository.findAll(Sort.by("id")).get(0);
         AffectedService service = serviceRepository.findAll(Sort.by("id")).get(0);
-        SlaPolicy policy = slaPolicyRepository.findAll(Sort.by("id")).get(0);
+        SlaPolicy policy = slaPolicyRepository.findByPriority(Priority.P3).orElseThrow();
         return new IncidentCreateRequest("Rollback-safe notification flow test", category.getId(),
                 service.getId(), policy.getId(), Impact.MEDIUM, Urgency.MEDIUM,
                 BusinessCriticality.MEDIUM, policy.getPriority());
