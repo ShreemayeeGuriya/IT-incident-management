@@ -91,7 +91,7 @@ class PostgresNotificationFlowIT {
     private IncidentCreateRequest request() {
         Category category = categoryRepository.findAll(Sort.by("id")).get(0);
         AffectedService service = serviceRepository.findAll(Sort.by("id")).get(0);
-        SlaPolicy policy = slaPolicyRepository.findAll(Sort.by("id")).get(0);
+        SlaPolicy policy = slaPolicyRepository.findByPriority(Priority.P3).orElseThrow();
         return new IncidentCreateRequest("Rollback-safe notification flow test", category.getId(),
                 service.getId(), policy.getId(), Impact.MEDIUM, Urgency.MEDIUM,
                 BusinessCriticality.MEDIUM, policy.getPriority());
@@ -153,6 +153,13 @@ class PostgresNotificationFlowIT {
         assertEquals(1, eventCount(assignee, incident.getId(), "TECHNICIAN_ASSIGNMENT_CHANGED"));
         assertEquals(0, eventCount(adminActor, incident.getId(), "TECHNICIAN_ASSIGNMENT_CHANGED"));
 
+        // Walk the lifecycle up to RESOLVED; skipping steps is no longer allowed.
+        for (IncidentStatus step : List.of(IncidentStatus.CLASSIFIED, IncidentStatus.PRIORITIZED,
+                IncidentStatus.ASSIGNED, IncidentStatus.INVESTIGATING)) {
+            workflowService.changeState(incident.getId().longValue(), new StateChangeRequest(step), adminActor);
+        }
+        incidentService.update(incident.getId().longValue(), new IncidentUpdateRequest(null, null, null, null,
+                null, null, null, null, null, "Restarted the affected service", null), adminActor);
         workflowService.changeState(incident.getId().longValue(),
                 new StateChangeRequest(IncidentStatus.RESOLVED), adminActor);
         assertEquals(1, eventCount(reporter, incident.getId(), "INCIDENT_RESOLVED"));

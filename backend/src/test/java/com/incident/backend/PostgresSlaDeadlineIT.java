@@ -80,12 +80,32 @@ class PostgresSlaDeadlineIT {
     private IncidentCreateRequest createRequest(Priority priority, Integer policyId) {
         Category category = categoryRepository.findAll(Sort.by("id")).get(0);
         AffectedService service = serviceRepository.findAll(Sort.by("id")).get(0);
+        Impact impact = switch (priority) {
+            case P1, P2 -> Impact.HIGH;
+            case P3 -> Impact.MEDIUM;
+            case P4 -> Impact.LOW;
+        };
+        Urgency urgency = impact == Impact.HIGH ? Urgency.HIGH : impact == Impact.MEDIUM
+                ? Urgency.MEDIUM : Urgency.LOW;
+        BusinessCriticality criticality = priority == Priority.P2 ? BusinessCriticality.LOW
+                : impact == Impact.HIGH ? BusinessCriticality.HIGH : impact == Impact.MEDIUM
+                ? BusinessCriticality.MEDIUM : BusinessCriticality.LOW;
         return new IncidentCreateRequest("SLA deadline integration test", category.getId(), service.getId(),
-                policyId, Impact.MEDIUM, Urgency.MEDIUM, BusinessCriticality.MEDIUM, priority);
+                policyId, impact, urgency, criticality, priority);
     }
 
     private IncidentUpdateRequest updateRequest(Integer policyId, Priority priority, String description) {
-        return new IncidentUpdateRequest(description, null, null, policyId, null, null, null,
+        Impact impact = priority == null ? null : switch (priority) {
+            case P1, P2 -> Impact.HIGH;
+            case P3 -> Impact.MEDIUM;
+            case P4 -> Impact.LOW;
+        };
+        Urgency urgency = impact == null ? null : impact == Impact.HIGH ? Urgency.HIGH
+                : impact == Impact.MEDIUM ? Urgency.MEDIUM : Urgency.LOW;
+        BusinessCriticality criticality = priority == null ? null : priority == Priority.P2
+                ? BusinessCriticality.LOW : impact == Impact.HIGH ? BusinessCriticality.HIGH
+                : impact == Impact.MEDIUM ? BusinessCriticality.MEDIUM : BusinessCriticality.LOW;
+        return new IncidentUpdateRequest(description, null, null, policyId, impact, urgency, criticality,
                 priority, null, null, null);
     }
 

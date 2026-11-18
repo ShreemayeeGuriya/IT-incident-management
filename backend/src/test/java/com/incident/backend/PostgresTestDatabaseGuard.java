@@ -18,7 +18,7 @@ class PostgresTestDatabaseGuard {
                 String driverName = connection.getMetaData().getDriverName();
                 if (driverName == null || !driverName.toLowerCase(Locale.ROOT).contains("postgresql")) {
                     throw new IllegalStateException(
-                            "PostgreSQL integration tests require the PostgreSQL driver and database radar_itsm_test");
+                            "PostgreSQL integration tests require the PostgreSQL driver and database IT_incident_management");
                 }
 
                 String databaseName;
@@ -31,9 +31,9 @@ class PostgresTestDatabaseGuard {
                     databaseName = result.getString(1);
                 }
 
-                if (!"radar_itsm_test".equals(databaseName)) {
+                if (!"IT_incident_management".equals(databaseName)) {
                     throw new IllegalStateException(
-                            "PostgreSQL integration tests require the PostgreSQL driver and database radar_itsm_test");
+                            "PostgreSQL integration tests require the PostgreSQL driver and database IT_incident_management");
                 }
             } catch (SQLException exception) {
                 throw new IllegalStateException(
