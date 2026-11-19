@@ -11,6 +11,7 @@ import com.incident.backend.service.IncidentService;
 import com.incident.backend.service.IncidentWorkflowService;
 import com.incident.backend.service.UserService;
 import com.incident.backend.service.AuditLogService;
+import com.incident.backend.lifecycle.IncidentLifecycle;
 import com.incident.backend.security.JwtService;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -36,6 +37,7 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
@@ -64,6 +66,7 @@ class PostgresIncidentAlignmentIT {
     @Autowired TransactionTemplate transactionTemplate;
     @Autowired IncidentRepository incidentRepository;
     @MockitoSpyBean AuditLogService auditLogService;
+    @MockitoSpyBean IncidentLifecycle incidentLifecycle;
 
     private User user(Role role) {
         User user = new User();
@@ -88,7 +91,8 @@ class PostgresIncidentAlignmentIT {
     void createsRetrievesAndUpdatesIncident() {
         User reporter = user(Role.ADMIN);
         var created = incidentService.create(request(), reporter);
-        assertEquals(IncidentStatus.REPORTED, created.status());
+        assertEquals(IncidentStatus.PRIORITIZED, created.status());
+        assertEquals(Priority.P1, created.priority());
         assertEquals(SlaStatus.NOT_STARTED, created.slaStatus());
         assertEquals(reporter.getId().longValue(), created.reporter().id());
         assertNotNull(created.createdAt());
@@ -98,6 +102,11 @@ class PostgresIncidentAlignmentIT {
         assertEquals(created.category().id(), retrieved.category().id());
         assertEquals(created.service().id(), retrieved.service().id());
         assertEquals(created.slaPolicy().id(), retrieved.slaPolicy().id());
+        assertEquals(IncidentStatus.PRIORITIZED, retrieved.status());
+        assertEquals(Priority.P1, retrieved.priority());
+        Incident persisted = incidentRepository.findById(Math.toIntExact(created.id())).orElseThrow();
+        assertEquals(IncidentStatus.PRIORITIZED, persisted.getStatus());
+        assertEquals(Priority.P1, persisted.getPriority());
 
         var updated = incidentService.update(created.id(), new IncidentUpdateRequest(
                 "Updated description", null, null, null, null, null, null, null,
@@ -152,7 +161,7 @@ class PostgresIncidentAlignmentIT {
                 null, null, null, null, investigationAfter, resolutionAfter, closureAfter), reporter);
 
         AuditLog firstUpdate = auditLogRepository
-                .findByIncidentIdOrderByTimestampAscIdAsc(Math.toIntExact(created.id())).get(1);
+                .findByIncidentIdOrderByTimestampAscIdAsc(Math.toIntExact(created.id())).get(3);
         JsonNode firstOld = objectMapper.readTree(firstUpdate.getOldValue());
         JsonNode firstNew = objectMapper.readTree(firstUpdate.getNewValue());
         assertEquals("PRESENT", firstOld.get("description").asText());
@@ -172,7 +181,7 @@ class PostgresIncidentAlignmentIT {
                 null, null, null, null, "", null, ""), reporter);
         List<AuditLog> history = auditLogRepository
                 .findByIncidentIdOrderByTimestampAscIdAsc(Math.toIntExact(created.id()));
-        AuditLog emptyingUpdate = history.get(2);
+        AuditLog emptyingUpdate = history.get(4);
         JsonNode secondOld = objectMapper.readTree(emptyingUpdate.getOldValue());
         JsonNode secondNew = objectMapper.readTree(emptyingUpdate.getNewValue());
         assertEquals("PRESENT", secondOld.get("description").asText());
@@ -203,30 +212,40 @@ class PostgresIncidentAlignmentIT {
         var created = incidentService.create(request(), reporter);
         List<AuditLog> afterCreate = auditLogRepository
                 .findByIncidentIdOrderByTimestampAscIdAsc(Math.toIntExact(created.id()));
-        assertEquals(1, afterCreate.size());
+        assertEquals(3, afterCreate.size());
         assertEquals("INCIDENT_CREATED", afterCreate.get(0).getAction());
         assertEquals(reporter.getId(), afterCreate.get(0).getActor().getId());
         assertEquals(created.id().intValue(), afterCreate.get(0).getIncident().getId());
+        assertEquals("INCIDENT_STATUS_CHANGED", afterCreate.get(1).getAction());
+        assertTrue(afterCreate.get(1).getDescription().contains("Automatically advanced"));
+        assertTrue(afterCreate.get(1).getOldValue().contains("REPORTED"));
+        assertTrue(afterCreate.get(1).getNewValue().contains("CLASSIFIED"));
+        assertEquals(reporter.getId(), afterCreate.get(1).getActor().getId());
+        assertEquals("INCIDENT_STATUS_CHANGED", afterCreate.get(2).getAction());
+        assertTrue(afterCreate.get(2).getDescription().contains("Automatically advanced"));
+        assertTrue(afterCreate.get(2).getOldValue().contains("CLASSIFIED"));
+        assertTrue(afterCreate.get(2).getNewValue().contains("PRIORITIZED"));
+        assertEquals(reporter.getId(), afterCreate.get(2).getActor().getId());
 
         incidentService.update(created.id(), new IncidentUpdateRequest("Changed description", null, null, null,
                 null, null, null, null, null, null, null), reporter);
         List<AuditLog> afterUpdate = auditLogRepository
                 .findByIncidentIdOrderByTimestampAscIdAsc(Math.toIntExact(created.id()));
-        assertEquals(2, afterUpdate.size(), "same values must not create extra field audit rows");
-        AuditLog update = afterUpdate.get(1);
+        assertEquals(4, afterUpdate.size(), "same values must not create extra field audit rows");
+        AuditLog update = afterUpdate.get(3);
         assertEquals("INCIDENT_UPDATED", update.getAction());
         assertTrue(update.getDescription().contains("description"));
         assertEquals("PRESENT", objectMapper.readTree(update.getOldValue()).path("description").asText());
         assertEquals("PRESENT", objectMapper.readTree(update.getNewValue()).path("description").asText());
         incidentService.update(created.id(), new IncidentUpdateRequest("Changed description", null, null, null,
                 null, null, null, null, null, null, null), reporter);
-        assertEquals(2, auditLogRepository.countByIncidentId(Math.toIntExact(created.id())),
+        assertEquals(4, auditLogRepository.countByIncidentId(Math.toIntExact(created.id())),
                 "unchanged values must not create another audit event");
         incidentService.update(created.id(), new IncidentUpdateRequest(null, null, null, null,
                 Impact.MEDIUM, null, null, null, null, null, null), admin);
-        assertEquals(3, auditLogRepository.countByIncidentId(Math.toIntExact(created.id())));
+        assertEquals(5, auditLogRepository.countByIncidentId(Math.toIntExact(created.id())));
         AuditLog classificationUpdate = auditLogRepository
-                .findByIncidentIdOrderByTimestampAscIdAsc(Math.toIntExact(created.id())).get(2);
+                .findByIncidentIdOrderByTimestampAscIdAsc(Math.toIntExact(created.id())).get(4);
         assertTrue(classificationUpdate.getOldValue().contains("HIGH"));
         assertTrue(classificationUpdate.getNewValue().contains("MEDIUM"));
 
@@ -239,9 +258,7 @@ class PostgresIncidentAlignmentIT {
         Technician secondTechnician = technicianRepository.findByUserId(secondTechUser.getId()).orElseThrow();
         workflowService.assign(created.id(), secondTechnician.getId().longValue(), admin);
         workflowService.assign(created.id(), null, admin);
-        // Walk the full lifecycle; assigning a PRIORITIZED incident moves it to ASSIGNED automatically.
-        workflowService.changeState(created.id(), new StateChangeRequest(IncidentStatus.CLASSIFIED), admin);
-        workflowService.changeState(created.id(), new StateChangeRequest(IncidentStatus.PRIORITIZED), admin);
+        // Creation already prioritized the incident; assignment moves it to ASSIGNED automatically.
         workflowService.assign(created.id(), technician.getId().longValue(), admin);
         workflowService.changeState(created.id(), new StateChangeRequest(IncidentStatus.INVESTIGATING), admin);
         incidentService.update(created.id(), new IncidentUpdateRequest(null, null, null, null, null, null, null,
@@ -253,29 +270,30 @@ class PostgresIncidentAlignmentIT {
 
         List<AuditLog> history = auditLogRepository
                 .findByIncidentIdOrderByTimestampAscIdAsc(Math.toIntExact(created.id()));
-        assertEquals(List.of("INCIDENT_CREATED", "INCIDENT_UPDATED", "INCIDENT_UPDATED", "TECHNICIAN_ASSIGNMENT_CHANGED",
-                        "TECHNICIAN_ASSIGNMENT_CHANGED", "TECHNICIAN_ASSIGNMENT_CHANGED",
-                        "INCIDENT_STATUS_CHANGED", "INCIDENT_STATUS_CHANGED",
+        assertEquals(List.of("INCIDENT_CREATED", "INCIDENT_STATUS_CHANGED", "INCIDENT_STATUS_CHANGED",
+                        "INCIDENT_UPDATED", "INCIDENT_UPDATED", "TECHNICIAN_ASSIGNMENT_CHANGED",
+                        "INCIDENT_STATUS_CHANGED", "TECHNICIAN_ASSIGNMENT_CHANGED",
+                        "TECHNICIAN_ASSIGNMENT_CHANGED", "INCIDENT_STATUS_CHANGED",
                         "TECHNICIAN_ASSIGNMENT_CHANGED", "INCIDENT_STATUS_CHANGED",
                         "INCIDENT_STATUS_CHANGED", "INCIDENT_UPDATED", "INCIDENT_RESOLVED",
                         "INCIDENT_STATUS_CHANGED", "INCIDENT_CLOSED", "COMMENT_CREATED"),
                 history.stream().map(AuditLog::getAction).toList());
-        assertTrue(history.get(3).getOldValue() == null);
-        assertTrue(history.get(3).getNewValue().contains(technician.getId().toString()));
-        assertTrue(history.get(4).getOldValue().contains(technician.getId().toString()));
-        assertTrue(history.get(4).getNewValue().contains(secondTechnician.getId().toString()));
-        assertTrue(history.get(5).getOldValue().contains(secondTechnician.getId().toString()));
-        assertNull(history.get(5).getNewValue());
-        assertTrue(history.get(6).getOldValue().contains("REPORTED"));
-        assertTrue(history.get(6).getNewValue().contains("CLASSIFIED"));
-        assertTrue(history.get(7).getNewValue().contains("PRIORITIZED"));
-        assertTrue(history.get(9).getOldValue().contains("PRIORITIZED"));
-        assertTrue(history.get(9).getNewValue().contains("ASSIGNED"));
-        assertTrue(history.get(10).getNewValue().contains("INVESTIGATING"));
-        assertTrue(history.get(12).getNewValue().contains("RESOLVED"));
-        assertTrue(history.get(13).getNewValue().contains("VERIFIED"));
-        assertTrue(history.get(14).getNewValue().contains("CLOSED"));
-        assertFalse(history.get(15).getNewValue().contains("Audit comment body"));
+        assertTrue(history.get(5).getOldValue() == null);
+        assertTrue(history.get(5).getNewValue().contains(technician.getId().toString()));
+        assertTrue(history.get(7).getOldValue().contains(technician.getId().toString()));
+        assertTrue(history.get(7).getNewValue().contains(secondTechnician.getId().toString()));
+        assertTrue(history.get(8).getOldValue().contains(secondTechnician.getId().toString()));
+        assertNull(history.get(8).getNewValue());
+        assertTrue(history.get(1).getOldValue().contains("REPORTED"));
+        assertTrue(history.get(1).getNewValue().contains("CLASSIFIED"));
+        assertTrue(history.get(2).getNewValue().contains("PRIORITIZED"));
+        assertTrue(history.get(11).getOldValue().contains("PRIORITIZED"));
+        assertTrue(history.get(11).getNewValue().contains("ASSIGNED"));
+        assertTrue(history.get(12).getNewValue().contains("INVESTIGATING"));
+        assertTrue(history.get(14).getNewValue().contains("RESOLVED"));
+        assertTrue(history.get(15).getNewValue().contains("VERIFIED"));
+        assertTrue(history.get(16).getNewValue().contains("CLOSED"));
+        assertFalse(history.get(17).getNewValue().contains("Audit comment body"));
         for (int i = 1; i < history.size(); i++) {
             assertFalse(history.get(i).getTimestamp().isBefore(history.get(i - 1).getTimestamp()));
         }
@@ -314,6 +332,28 @@ class PostgresIncidentAlignmentIT {
     }
 
     @Test
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
+    void secondCreationTransitionFailureRollsBackIncidentFirstTransitionAndAudits() {
+        User reporter = transactionTemplate.execute(status -> user(Role.EMPLOYEE));
+        long incidentCountBefore = incidentRepository.count();
+        long auditCountBefore = auditLogRepository.count();
+        try {
+            doThrow(new IllegalStateException("forced prioritized transition failure"))
+                    .when(incidentLifecycle).transition(any(), eq(IncidentStatus.PRIORITIZED));
+
+            assertThrows(IllegalStateException.class, () -> transactionTemplate.execute(status -> {
+                incidentService.create(request(), reporter);
+                return null;
+            }));
+
+            assertEquals(incidentCountBefore, incidentRepository.count());
+            assertEquals(auditCountBefore, auditLogRepository.count());
+        } finally {
+            transactionTemplate.executeWithoutResult(status -> userRepository.deleteById(reporter.getId()));
+        }
+    }
+
+    @Test
     @Rollback
     void incidentRoutesUseThePostgresItSmPayloadAndTechnicianId() throws Exception {
         User admin = user(Role.ADMIN);
@@ -323,7 +363,7 @@ class PostgresIncidentAlignmentIT {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request())))
                 .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.status").value("REPORTED"))
+                .andExpect(jsonPath("$.status").value("PRIORITIZED"))
                 .andExpect(jsonPath("$.priority").isString())
                 .andExpect(jsonPath("$.responseSlaStatus").value("NOT_STARTED"))
                 .andExpect(jsonPath("$.resolutionSlaStatus").value("NOT_STARTED"))
@@ -336,6 +376,14 @@ class PostgresIncidentAlignmentIT {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.reporter.email").value(admin.getEmail()))
                 .andExpect(jsonPath("$.category.id").value(request().categoryId()));
+
+        User employee = user(Role.EMPLOYEE);
+        String employeeToken = jwtService.generateToken(employee);
+        mvc.perform(patch("/api/incidents/{id}/status", incidentId)
+                        .header("Authorization", "Bearer " + employeeToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"status\":\"CLOSED\"}"))
+                .andExpect(status().isForbidden());
 
         IncidentUpdateRequest update = new IncidentUpdateRequest("Updated through HTTP", null, null, null,
                 null, null, null, null, "investigated", null, null);

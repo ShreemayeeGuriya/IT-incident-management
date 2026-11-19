@@ -2,6 +2,7 @@ package com.incident.backend.repository;
 
 import com.incident.backend.model.Incident;
 import com.incident.backend.model.SlaObjectiveStatus;
+import org.springframework.data.domain.Pageable;
 import jakarta.persistence.LockModeType;
 import org.springframework.data.repository.query.Param;
 import org.springframework.data.jpa.repository.Query;
@@ -22,6 +23,19 @@ public interface IncidentRepository
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select i from Incident i where i.id = :incidentId")
     Optional<Incident> findByIdForUpdate(@Param("incidentId") Integer incidentId);
+
+    @Query("""
+            select i from Incident i
+            join fetch i.category
+            join fetch i.service
+            where (i.category.id = :categoryId or i.service.id = :serviceId)
+              and (:reporterId is null or i.reporter.id = :reporterId)
+            order by i.createdAt desc, i.id desc
+            """)
+    List<Incident> findDuplicateCandidates(@Param("categoryId") Integer categoryId,
+                                          @Param("serviceId") Integer serviceId,
+                                          @Param("reporterId") Integer reporterId,
+                                          Pageable pageable);
 
     @Query("""
             select i.id from Incident i

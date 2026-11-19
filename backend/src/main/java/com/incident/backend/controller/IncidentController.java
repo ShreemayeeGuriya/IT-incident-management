@@ -7,6 +7,8 @@ import com.incident.backend.dto.CommentResponse;
 import com.incident.backend.dto.IncidentCreateRequest;
 import com.incident.backend.dto.IncidentResponse;
 import com.incident.backend.dto.IncidentUpdateRequest;
+import com.incident.backend.dto.DuplicateIncidentCheckRequest;
+import com.incident.backend.dto.DuplicateIncidentSuggestion;
 import com.incident.backend.dto.PageResponse;
 import com.incident.backend.dto.StateChangeRequest;
 import com.incident.backend.model.IncidentStatus;
@@ -16,6 +18,7 @@ import com.incident.backend.service.CommentService;
 import com.incident.backend.service.AuditLogService;
 import com.incident.backend.service.IncidentService;
 import com.incident.backend.service.IncidentWorkflowService;
+import com.incident.backend.service.DuplicateIncidentService;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -42,20 +45,30 @@ public class IncidentController {
     private final IncidentWorkflowService workflowService;
     private final CommentService commentService;
     private final AuditLogService auditLogService;
+    private final DuplicateIncidentService duplicateIncidentService;
 
     public IncidentController(IncidentService incidentService,
                               IncidentWorkflowService workflowService,
-                              CommentService commentService, AuditLogService auditLogService) {
+                              CommentService commentService, AuditLogService auditLogService,
+                              DuplicateIncidentService duplicateIncidentService) {
         this.incidentService = incidentService;
         this.workflowService = workflowService;
         this.commentService = commentService;
         this.auditLogService = auditLogService;
+        this.duplicateIncidentService = duplicateIncidentService;
     }
 
     @PostMapping
     public ResponseEntity<IncidentResponse> create(@Valid @RequestBody IncidentCreateRequest request,
                                                    @AuthenticationPrincipal UserPrincipal p) {
         return ResponseEntity.status(HttpStatus.CREATED).body(incidentService.create(request, p.getUser()));
+    }
+
+    @PostMapping("/duplicate-suggestions")
+    public List<DuplicateIncidentSuggestion> duplicateSuggestions(
+            @Valid @RequestBody DuplicateIncidentCheckRequest request,
+            @AuthenticationPrincipal UserPrincipal p) {
+        return duplicateIncidentService.findSuggestions(request, p.getUser());
     }
 
     @GetMapping

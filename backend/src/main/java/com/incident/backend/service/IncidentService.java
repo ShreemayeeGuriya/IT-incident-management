@@ -41,11 +41,13 @@ public class IncidentService {
     private final IncidentAccess access;
     private final ApplicationEventPublisher eventPublisher;
     private final AuditLogRepository auditLogRepository;
+    private final IncidentWorkflowService workflowService;
 
     public IncidentService(IncidentRepository incidentRepository, UserRepository userRepository,
                            CategoryRepository categoryRepository, AffectedServiceRepository serviceRepository,
                            SlaService slaService, PriorityCalculator priorityCalculator, IncidentAccess access,
-                           ApplicationEventPublisher eventPublisher, AuditLogRepository auditLogRepository) {
+                           ApplicationEventPublisher eventPublisher, AuditLogRepository auditLogRepository,
+                           IncidentWorkflowService workflowService) {
         this.incidentRepository = incidentRepository;
         this.userRepository = userRepository;
         this.categoryRepository = categoryRepository;
@@ -55,6 +57,7 @@ public class IncidentService {
         this.access = access;
         this.eventPublisher = eventPublisher;
         this.auditLogRepository = auditLogRepository;
+        this.workflowService = workflowService;
     }
 
     public IncidentResponse create(IncidentCreateRequest request, User current) {
@@ -97,7 +100,7 @@ public class IncidentService {
         snapshotValues.put("resolutionDeadline", saved.getResolutionDeadline().toString());
         eventPublisher.publishEvent(new IncidentCreatedEvent(UUID.randomUUID(), saved.getId(), current.getId(),
                 Instant.now(), Map.of(), snapshotValues, "Incident created"));
-        return IncidentResponse.from(saved);
+        return workflowService.advanceCreationToPrioritized(saved.getId().longValue(), current);
     }
 
     @Transactional(readOnly = true)
