@@ -154,8 +154,7 @@ class PostgresNotificationFlowIT {
         assertEquals(0, eventCount(adminActor, incident.getId(), "TECHNICIAN_ASSIGNMENT_CHANGED"));
 
         // Walk the lifecycle up to RESOLVED; skipping steps is no longer allowed.
-        for (IncidentStatus step : List.of(IncidentStatus.CLASSIFIED, IncidentStatus.PRIORITIZED,
-                IncidentStatus.ASSIGNED, IncidentStatus.INVESTIGATING)) {
+        for (IncidentStatus step : List.of(IncidentStatus.INVESTIGATING)) {
             workflowService.changeState(incident.getId().longValue(), new StateChangeRequest(step), adminActor);
         }
         incidentService.update(incident.getId().longValue(), new IncidentUpdateRequest(null, null, null, null,

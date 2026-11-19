@@ -195,7 +195,7 @@ class PostgresSlaDeadlineIT {
         assertEquals(originalCreatedAt, updated.createdAt());
 
         AuditLog updateAudit = auditLogRepository
-                .findByIncidentIdOrderByTimestampAscIdAsc(Math.toIntExact(created.id())).get(1);
+                .findByIncidentIdOrderByTimestampAscIdAsc(Math.toIntExact(created.id())).get(3);
         JsonNode oldValues = objectMapper.readTree(updateAudit.getOldValue());
         JsonNode newValues = objectMapper.readTree(updateAudit.getNewValue());
         assertEquals(created.slaPolicy().id().toString(), oldValues.get("slaPolicyId").asText());

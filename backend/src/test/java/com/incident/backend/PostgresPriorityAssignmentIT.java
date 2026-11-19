@@ -131,10 +131,7 @@ class PostgresPriorityAssignmentIT {
 
     /** A PRIORITIZED incident with no technician, ready for auto-assignment. */
     private long prioritized(String categoryName) {
-        long id = incident(categoryName, Impact.MEDIUM, Urgency.MEDIUM, BusinessCriticality.MEDIUM, Priority.P3);
-        workflowService.changeState(id, new StateChangeRequest(CLASSIFIED), admin);
-        workflowService.changeState(id, new StateChangeRequest(PRIORITIZED), admin);
-        return id;
+        return incident(categoryName, Impact.MEDIUM, Urgency.MEDIUM, BusinessCriticality.MEDIUM, Priority.P3);
     }
 
     /** Changes a technician row directly, then drops cached entities so the change is seen (as in a new request). */
@@ -531,6 +528,9 @@ class PostgresPriorityAssignmentIT {
     void onlyPrioritizedUnassignedIncidentsCanBeAutoAssigned() {
         technician("Network");
         long reported = incident("Network", Impact.LOW, Urgency.LOW, BusinessCriticality.LOW, Priority.P4);
+        Incident reportedIncident = reload(reported);
+        reportedIncident.setStatus(REPORTED);
+        incidentRepository.saveAndFlush(reportedIncident);
         IncidentNotEligibleException ex = assertThrows(IncidentNotEligibleException.class,
                 () -> assignmentService.autoAssign(reported, admin));
         assertTrue(ex.getMessage().contains("classify and prioritize"));

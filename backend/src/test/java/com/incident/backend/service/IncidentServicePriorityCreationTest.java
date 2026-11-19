@@ -8,6 +8,7 @@ import com.incident.backend.priority.ImpactUrgencyMatrixPriorityStrategy;
 import com.incident.backend.priority.PriorityCalculator;
 import com.incident.backend.priority.WeightedScorePriorityStrategy;
 import com.incident.backend.repository.*;
+import com.incident.backend.dto.IncidentResponse;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -37,6 +38,7 @@ class IncidentServicePriorityCreationTest {
     @Mock IncidentAccess access;
     @Mock ApplicationEventPublisher eventPublisher;
     @Mock AuditLogRepository auditLogRepository;
+    @Mock IncidentWorkflowService workflowService;
 
     private final PriorityCalculator priorityCalculator = new PriorityCalculator(
             List.of(new WeightedScorePriorityStrategy(), new ImpactUrgencyMatrixPriorityStrategy()),
@@ -50,7 +52,8 @@ class IncidentServicePriorityCreationTest {
     @BeforeEach
     void setUp() {
         incidentService = new IncidentService(incidentRepository, userRepository, categoryRepository,
-                serviceRepository, slaService, priorityCalculator, access, eventPublisher, auditLogRepository);
+                serviceRepository, slaService, priorityCalculator, access, eventPublisher, auditLogRepository,
+                workflowService);
 
         when(categoryRepository.findById(1)).thenReturn(Optional.of(category));
         when(serviceRepository.findById(2)).thenReturn(Optional.of(service));
@@ -63,6 +66,7 @@ class IncidentServicePriorityCreationTest {
         var response = create(Impact.HIGH, Urgency.HIGH, BusinessCriticality.HIGH, Priority.P1);
 
         assertEquals(Priority.P1, response.priority());
+        assertEquals(IncidentStatus.PRIORITIZED, response.status());
         assertEquals(Priority.P1, firstSavedIncident().getPriority());
         assertEquals(CREATED_AT.plusSeconds(60), response.responseDeadline());
         assertEquals(CREATED_AT.plusSeconds(600), response.resolutionDeadline());
@@ -70,6 +74,7 @@ class IncidentServicePriorityCreationTest {
         verify(eventPublisher).publishEvent(eventCaptor.capture());
         IncidentCreatedEvent event = (IncidentCreatedEvent) eventCaptor.getValue();
         assertEquals("P1", event.newValues().get("priority"));
+        verify(workflowService).advanceCreationToPrioritized(41L, reporter);
     }
 
     @Test
@@ -130,6 +135,11 @@ class IncidentServicePriorityCreationTest {
             if (incident.getId() == null) ReflectionTestUtils.setField(incident, "id", 41);
             if (incident.getCreatedAt() == null) ReflectionTestUtils.setField(incident, "createdAt", CREATED_AT);
             return incident;
+        });
+        when(workflowService.advanceCreationToPrioritized(41L, reporter)).thenAnswer(invocation -> {
+            Incident incident = firstSavedIncident();
+            incident.setStatus(IncidentStatus.PRIORITIZED);
+            return IncidentResponse.from(incident);
         });
     }
 
