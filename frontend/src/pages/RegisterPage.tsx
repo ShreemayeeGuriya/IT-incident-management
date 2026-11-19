@@ -1,103 +1,76 @@
 import { useState, type FormEvent } from "react";
-import { Link, useNavigate } from "react-router-dom";
-import { isAxiosError } from "axios";
+import { Link, Navigate, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
-
-interface ErrorResponse {
-  message?: string;
-  fieldErrors?: Record<string, string>;
-}
+import { ApiError } from "../api/client";
 
 export default function RegisterPage() {
-  const { register } = useAuth();
-  const navigate = useNavigate();
+  const { user, register } = useAuth();
+  const nav = useNavigate();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirm, setConfirm] = useState("");
   const [error, setError] = useState("");
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
 
-  async function handleSubmit(e: FormEvent) {
+  if (user) return <Navigate to="/" replace />;
+
+  async function onSubmit(e: FormEvent) {
     e.preventDefault();
     setError("");
     setFieldErrors({});
+
+    if (password.length < 8) return setFieldErrors({ password: "Password must be at least 8 characters" });
+    if (password !== confirm) return setFieldErrors({ confirm: "Passwords do not match" });
+
     setBusy(true);
     try {
-      await register({ name, email, password });
-      navigate("/");
+      await register(name.trim(), email.trim(), password);
+      nav("/", { replace: true });
     } catch (err) {
-      if (isAxiosError<ErrorResponse>(err)) {
-        const status = err.response?.status;
-        if (status === 409) {
-          setError("This email is already registered.");
-        } else if (status === 400) {
-          setFieldErrors(err.response?.data?.fieldErrors ?? {});
-          setError(err.response?.data?.message ?? "Please check your details.");
-        } else {
-          setError("Could not register. Please try again.");
-        }
+      if (err instanceof ApiError) {
+        if (err.status === 409) setError("This email is already registered.");
+        else if (err.body?.fieldErrors) setFieldErrors(err.body.fieldErrors);
+        else setError(err.message);
       } else {
-        setError("Could not register. Please try again.");
+        setError("Cannot reach the server. Is the backend running on port 8080?");
       }
     } finally {
       setBusy(false);
     }
   }
 
-  const fieldError = (key: string) =>
-    fieldErrors[key] ? (
-      <div style={{ color: "var(--p1)", fontSize: 12 }}>{fieldErrors[key]}</div>
-    ) : null;
-
   return (
-    <div style={{ maxWidth: 360, margin: "80px auto", padding: 24 }}>
-      <h2 style={{ marginTop: 0 }}>Create your Radar account</h2>
-      <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-        <label>
-          Name
-          <input
-            required
-            maxLength={100}
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            style={{ width: "100%", padding: 8, marginTop: 4 }}
-          />
-          {fieldError("name")}
-        </label>
-        <label>
-          Email
-          <input
-            type="email"
-            required
-            maxLength={150}
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            style={{ width: "100%", padding: 8, marginTop: 4 }}
-          />
-          {fieldError("email")}
-        </label>
-        <label>
-          Password (8 to 100 characters)
-          <input
-            type="password"
-            required
-            minLength={8}
-            maxLength={100}
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            style={{ width: "100%", padding: 8, marginTop: 4 }}
-          />
-          {fieldError("password")}
-        </label>
-        {error && <div style={{ color: "var(--p1)" }}>{error}</div>}
-        <button type="submit" disabled={busy} style={{ padding: 8 }}>
-          {busy ? "Creating account..." : "Register"}
+    <div className="auth-wrap">
+      <form className="auth-card" onSubmit={onSubmit}>
+        <h1>Create account</h1>
+        <div className="sub">New accounts are created as Employees</div>
+        {error && <div className="auth-banner">{error}</div>}
+
+        <label>Full name</label>
+        <input value={name} onChange={(e) => setName(e.target.value)} maxLength={100} required autoFocus />
+        {fieldErrors.name && <div className="error">{fieldErrors.name}</div>}
+
+        <label>Email</label>
+        <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} maxLength={150} required />
+        {fieldErrors.email && <div className="error">{fieldErrors.email}</div>}
+
+        <label>Password (8–100 characters)</label>
+        <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} maxLength={100} required />
+        {fieldErrors.password && <div className="error">{fieldErrors.password}</div>}
+
+        <label>Confirm password</label>
+        <input type="password" value={confirm} onChange={(e) => setConfirm(e.target.value)} required />
+        {fieldErrors.confirm && <div className="error">{fieldErrors.confirm}</div>}
+
+        <button className="btn" type="submit" disabled={busy}>
+          {busy ? "Creating…" : "Create account"}
         </button>
+        <div className="alt">
+          Already have an account? <Link to="/login">Sign in</Link>
+        </div>
       </form>
-      <p>
-        Already have an account? <Link to="/login">Sign in</Link>
-      </p>
     </div>
   );
 }

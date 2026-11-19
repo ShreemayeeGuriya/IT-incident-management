@@ -1,48 +1,55 @@
 :root {
-  /* Top bar and surfaces (from the Radar screenshot) */
-  --bar: #3b6ea5;
-  --bar-text: #ffffff;
-  --sidebar-bg: #f3f4f6;
-  --panel-bg: #ffffff;
-  --inspector-bg: #f7f7f8;
+  --menubar: #2c6fa6;
+  --accent: #9b4fe0;
+  --accent-ring: #b99bf0;
+  --bg: #ffffff;
+  --sidebar: #f3f3f5;
+  --selected: #e4e4e7;
   --border: #e3e3e6;
-
-  /* Text */
   --text: #1d1d1f;
-  --muted: #8a8a90;
-  --link: #1a5fd0;
-
-  /* Accents */
-  --accent: #a78bfa;
-  --sel-row: #e4e4e7;
-  --selected-blue: #5b9cf6;
-
-  /* Priority badges */
-  --p1: #dc2626;
-  --p2: #f59e0b;
-  --p3: #eab308;
-  --p4: #9ca3af;
+  --muted: #86868b;
+  --link: #0a68d8;
+  --p1: #d93025;
+  --p2: #f08c00;
+  --p3: #e5b400;
+  --p4: #8e8e93;
+  --ok: #2e9e5b;
+  --warn: #f08c00;
+  --breach: #d93025;
+  --radius: 10px;
+  font-family: -apple-system, "SF Pro Text", system-ui, sans-serif;
+  font-size: 13px;
 }
 
-* {
-  box-sizing: border-box;
-}
+* { box-sizing: border-box; }
 
 body {
   margin: 0;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  font-size: 13px;
   color: var(--text);
-  background: var(--panel-bg);
+  background: var(--bg);
 }
 
-a {
-  color: var(--link);
+a { color: var(--link); }
+
+input, textarea, select {
+  font: inherit;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #fff;
+}
+input:focus, textarea:focus, select:focus {
+  outline: 2px solid var(--accent-ring);
+  border-color: transparent;
 }
 
-input:focus,
-select:focus,
-textarea:focus {
-  outline: 3px solid var(--accent);
-  outline-offset: 0;
+button { font: inherit; cursor: pointer; }
+.btn {
+  background: var(--accent); color: #fff; border: none;
+  padding: 7px 14px; border-radius: 8px;
 }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn.secondary { background: var(--selected); color: var(--text); }
+
+.label { color: var(--muted); text-align: right; }
+.error { color: var(--breach); font-size: 12px; margin-top: 4px; }

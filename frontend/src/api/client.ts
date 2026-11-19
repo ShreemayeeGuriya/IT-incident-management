@@ -1,40 +1,35 @@
-import axios from "axios";
+const BASE = import.meta.env.VITE_API_URL as string;
 
-const TOKEN_KEY = "radar_token";
-
-export const tokenStore = {
-  get: () => localStorage.getItem(TOKEN_KEY),
-  set: (token: string) => localStorage.setItem(TOKEN_KEY, token),
-  clear: () => localStorage.removeItem(TOKEN_KEY),
-};
-
-const client = axios.create({
-  baseURL: "http://localhost:8080",
-  headers: { "Content-Type": "application/json" },
-});
-
-// Attach the JWT to every request
-client.interceptors.request.use((config) => {
-  const token = tokenStore.get();
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
+export class ApiError extends Error {
+  status: number;
+  body: any;
+  constructor(status: number, body: any) {
+    super(body?.message ?? `Request failed (${status})`);
+    this.status = status;
+    this.body = body; // 400 -> body.fieldErrors, 409 -> body.allowedNext
   }
-  return config;
-});
+}
 
-// On 401 (expired or invalid token), clear the session and go to login.
-// Login and register also return 401/409 for bad input, so skip those.
-client.interceptors.response.use(
-  (response) => response,
-  (error) => {
-    const url: string = error.config?.url ?? "";
-    const isAuthCall = url.includes("/api/auth/login") || url.includes("/api/auth/register");
-    if (error.response?.status === 401 && !isAuthCall) {
-      tokenStore.clear();
-      window.location.href = "/login?expired=1";
-    }
-    return Promise.reject(error);
+export async function api<T>(path: string, opts: RequestInit = {}): Promise<T> {
+  const token = localStorage.getItem("token");
+  const res = await fetch(BASE + path, {
+    ...opts,
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...opts.headers,
+    },
+  });
+
+  const body = await res.json().catch(() => null);
+
+  // Expired or invalid token: clear session and go to login
+  // (but not for a wrong password on the login call itself)
+  if (res.status === 401 && !path.startsWith("/auth/login")) {
+    localStorage.removeItem("token");
+    window.location.href = "/login";
   }
-);
 
-export default client;
+  if (!res.ok) throw new ApiError(res.status, body);
+  return body as T;
+}

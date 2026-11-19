@@ -1,0 +1,33 @@
+.shell { display: grid; grid-template-rows: 44px 1fr; height: 100vh; }
+
+.topbar {
+  background: var(--menubar); color: #fff;
+  display: flex; align-items: center; gap: 14px; padding: 0 16px;
+}
+.topbar .search { width: 280px; padding: 5px 10px; border-radius: 8px; border: none; }
+.topbar .link, .topbar .bell {
+  background: none; border: none; color: #fff; font-size: 13px; cursor: pointer;
+}
+.badge {
+  background: #e5383b; border-radius: 10px;
+  padding: 1px 6px; margin-left: 4px; font-size: 11px;
+}
+
+.body { display: grid; grid-template-columns: 230px 1fr; min-height: 0; }
+
+.sidebar {
+  background: var(--sidebar); border-right: 1px solid var(--border);
+  padding: 12px 8px; overflow: auto;
+}
+.sidebar h4 { color: var(--muted); font-size: 11px; margin: 16px 10px 4px; }
+.sidebar a {
+  display: block; padding: 6px 10px; border-radius: 8px;
+  color: var(--text); text-decoration: none;
+}
+.sidebar a:hover { background: #e9e9ec; }
+.sidebar a.active { background: var(--selected); }
+.sidebar a.new-btn {
+  background: var(--accent); color: #fff; text-align: center; margin-bottom: 8px;
+}
+
+.content { overflow: auto; min-height: 0; }

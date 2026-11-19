@@ -4,11 +4,11 @@ import Sidebar from "./Sidebar";
 
 export default function AppShell() {
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "100vh" }}>
+    <div className="shell">
       <TopBar />
-      <div style={{ display: "flex", flex: 1, minHeight: 0 }}>
+      <div className="body">
         <Sidebar />
-        <main style={{ flex: 1, padding: 16, overflow: "auto" }}>
+        <main className="content">
           <Outlet />
         </main>
       </div>

@@ -1,70 +1,54 @@
 import { useState, type FormEvent } from "react";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { isAxiosError } from "axios";
+import { Link, Navigate, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
+import { ApiError } from "../api/client";
 
 export default function LoginPage() {
-  const { login } = useAuth();
-  const navigate = useNavigate();
-  const [params] = useSearchParams();
+  const { user, login } = useAuth();
+  const nav = useNavigate();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
-  async function handleSubmit(e: FormEvent) {
+  if (user) return <Navigate to="/" replace />;
+
+  async function onSubmit(e: FormEvent) {
     e.preventDefault();
     setError("");
     setBusy(true);
     try {
-      await login({ email, password });
-      navigate("/");
+      await login(email.trim(), password);
+      nav("/", { replace: true });
     } catch (err) {
-      if (isAxiosError(err) && err.response?.status === 401) {
-        setError("Incorrect email or password.");
-      } else {
-        setError("Could not sign in. Please try again.");
-      }
+      if (err instanceof ApiError && err.status === 401) setError("Invalid email or password.");
+      else if (err instanceof ApiError) setError(err.message);
+      else setError("Cannot reach the server. Is the backend running on port 8080?");
     } finally {
       setBusy(false);
     }
   }
 
   return (
-    <div style={{ maxWidth: 360, margin: "80px auto", padding: 24 }}>
-      <h2 style={{ marginTop: 0 }}>Sign in to Radar</h2>
-      {params.get("expired") && (
-        <p style={{ color: "var(--muted)" }}>Your session expired. Please sign in again.</p>
-      )}
-      <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-        <label>
-          Email
-          <input
-            type="email"
-            required
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            style={{ width: "100%", padding: 8, marginTop: 4 }}
-          />
-        </label>
-        <label>
-          Password
-          <input
-            type="password"
-            required
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            style={{ width: "100%", padding: 8, marginTop: 4 }}
-          />
-        </label>
-        {error && <div style={{ color: "var(--p1)" }}>{error}</div>}
-        <button type="submit" disabled={busy} style={{ padding: 8 }}>
-          {busy ? "Signing in..." : "Sign in"}
+    <div className="auth-wrap">
+      <form className="auth-card" onSubmit={onSubmit}>
+        <h1>Radar · Incidents</h1>
+        <div className="sub">Sign in to continue</div>
+        {error && <div className="auth-banner">{error}</div>}
+
+        <label>Email</label>
+        <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required autoFocus />
+
+        <label>Password</label>
+        <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required />
+
+        <button className="btn" type="submit" disabled={busy}>
+          {busy ? "Signing in…" : "Sign in"}
         </button>
+        <div className="alt">
+          New here? <Link to="/register">Create an account</Link>
+        </div>
       </form>
-      <p>
-        No account? <Link to="/register">Register</Link>
-      </p>
     </div>
   );
 }
