@@ -42,6 +42,24 @@ HIGH criticality raises the result one level (never above P1), and LOW criticali
 
 **Applying a priority:** `POST /api/incidents/{id}/priority/recalculate` saves the result through the existing `IncidentService.update`. The SLA policy, deadlines and audit log follow automatically. Priority is fixed once an incident is RESOLVED.
 
+## 1.1 Duplicate incident suggestions
+
+Before creating a report, a signed-in user can send its description, category and affected service to `POST /api/incidents/duplicate-suggestions`. The endpoint is read-only: it returns a ranked JSON array with incident ID, description, category name, service name, current status and a similarity score from 0 to 1. No matches are represented by an empty array. It does not create, merge or update incidents.
+
+Candidates are limited to incidents sharing the requested category or service, then ranked using token Dice similarity for descriptions (70% of the score), category match (15%) and service match (15%). Text must reach 0.35 similarity and the combined score must reach 0.55. Thus category/service coincidence alone cannot qualify. Matching ignores case, punctuation, common filler words and duplicate tokens. At most the 200 newest candidates are scored. Technicians and administrators can search all incidents; employees only receive suggestions for incidents they can already view (their own reports), preserving the existing incident visibility rule. This feature uses existing columns and needs no migration.
+
+Example request body:
+
+```json
+{
+  "description": "Email server unavailable for all users",
+  "categoryId": 1,
+  "serviceId": 1
+}
+```
+
+Use the category and service IDs returned by the existing reference data/API in your database.
+
 ## 2. Technician assignment
 
 Automatic assignment only applies to **PRIORITIZED** incidents that have no technician yet. It assigns through the existing `IncidentWorkflowService.assign`, so the incident moves to ASSIGNED and the usual audit entry and notifications are produced.
@@ -79,6 +97,7 @@ The four business-rule exceptions share an abstract parent, `BusinessRuleViolati
 | Method and path | Who | Purpose |
 |---|---|---|
 | `PATCH /api/incidents/{id}/status` | Technician, Admin | Change status (lifecycle enforced) |
+| `POST /api/incidents/duplicate-suggestions` | Any authenticated user | Rank possible duplicates before reporting; employees are limited to their own visible incidents |
 | `POST /api/priority/preview` | Any user | Priority for given factors, e.g. live on the report form |
 | `GET /api/incidents/{id}/priority/assessment` | Viewer of the incident | What the priority should be, without changing it |
 | `POST /api/incidents/{id}/priority/recalculate` | Technician, Admin | Recalculate and save priority |
