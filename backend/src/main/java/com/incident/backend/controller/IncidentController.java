@@ -75,6 +75,7 @@ public class IncidentController {
     public PageResponse<IncidentResponse> list(
             @RequestParam(required = false) Priority priority,
             @RequestParam(required = false) IncidentStatus status,
+            @RequestParam(required = false) Long categoryId,
             @RequestParam(required = false) Long technicianId,
             @RequestParam(required = false) Long assigneeId,
             @RequestParam(required = false) String search,
@@ -84,7 +85,7 @@ public class IncidentController {
             @RequestParam(defaultValue = "desc") String direction,
             @AuthenticationPrincipal UserPrincipal p) {
         Long assignmentFilter = technicianId != null ? technicianId : assigneeId;
-        return incidentService.list(priority, status, assignmentFilter, search, page, size,
+        return incidentService.list(priority, status, categoryId, assignmentFilter, search, page, size,
                 sortBy, direction, p.getUser());
     }
 
