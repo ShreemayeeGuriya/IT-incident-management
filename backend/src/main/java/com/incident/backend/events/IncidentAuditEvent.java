@@ -9,6 +9,7 @@ public sealed interface IncidentAuditEvent permits IncidentCreatedEvent, Inciden
         TechnicianAssignmentChangedEvent, IncidentStatusChangedEvent, CommentCreatedEvent,
         SlaObjectiveTransitionEvent, IncidentEscalatedEvent, AdditionalInformationRequestedEvent,
         AdditionalInformationRespondedEvent {
+
     UUID eventId();
     Integer incidentId();
     Integer actorUserId();

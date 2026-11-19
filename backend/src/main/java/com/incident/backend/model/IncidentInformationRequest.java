@@ -59,9 +59,9 @@ public class IncidentInformationRequest {
     public String getResponseMessage() { return responseMessage; }
     public Instant getRespondedAt() { return respondedAt; }
 
-    public void respond(String message, Instant at) {
-        responseMessage = message;
-        respondedAt = at;
-        status = InformationRequestStatus.RESPONDED;
+      public void respond(String message, Instant at) {
+        this.responseMessage = message;
+        this.respondedAt = at;
+        this.status = InformationRequestStatus.RESPONDED;
     }
 }

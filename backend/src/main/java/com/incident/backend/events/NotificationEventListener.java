@@ -50,11 +50,23 @@ public class NotificationEventListener {
             addStatusRecipients(status, recipients);
         } else if (event instanceof CommentCreatedEvent comment) {
             addCommentRecipients(comment, recipients);
+        } else if (event instanceof CommentCreatedEvent comment) {
+            addCommentRecipients(comment, recipients);
         } else if (event instanceof AdditionalInformationRequestedEvent request) {
-            add(recipients, request.reporterUserId(), "The technician requested additional information for incident #"
-                    + request.incidentId() + ".");
+            add(recipients, request.reporterUserId(),
+                    "The technician requested additional information for incident #"
+                            + request.incidentId() + ".");
         } else if (event instanceof AdditionalInformationRespondedEvent response) {
-            add(recipients, response.requestingTechnicianUserId(), "The reporter responded to your information request for incident #"
+            add(recipients, response.requestingTechnicianUserId(),
+                    "The reporter responded to your information request for incident #"
+                            + response.incidentId() + ".");
+        } else if (event instanceof IncidentEscalatedEvent escalated) {
+            addEscalationRecipients(escalated, recipients);
+        } else if (event instanceof SlaObjectiveTransitionEvent sla
+                && (sla.newStatus() == SlaObjectiveStatus.APPROACHING_BREACH
+                    || sla.newStatus() == SlaObjectiveStatus.BREACHED)) {
+            addSlaObjectiveRecipients(sla, recipients);
+        } // IncidentUpdatedEvent intentionally creates no notification.
                     + response.incidentId() + ".");
         } else if (event instanceof IncidentEscalatedEvent escalated) {
             addEscalationRecipients(escalated, recipients);

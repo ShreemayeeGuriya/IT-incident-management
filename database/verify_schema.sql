@@ -12,8 +12,10 @@ BEGIN
       INTO missing_items
       FROM (VALUES
           ('users'), ('technicians'), ('skills'), ('technician_skills'),
-          ('categories'), ('services'), ('sla_policies'), ('incidents'), ('incident_escalations'),
-          ('comments'), ('audit_logs'), ('notifications'), ('incident_information_requests')
+          ('categories'), ('services'), ('sla_policies'), ('incidents'),
+          ('incident_escalations'), ('comments'), ('audit_logs'),
+          ('notifications'), ('incident_information_requests')
+      ) AS e(table_name)
       ) AS e(table_name)
      WHERE to_regclass('public.' || quote_ident(e.table_name)) IS NULL;
     IF missing_items IS NOT NULL THEN
@@ -115,7 +117,7 @@ BEGIN
           ('idx_audit_logs_incident_timestamp'), ('idx_audit_logs_actor_timestamp'),
           ('idx_notifications_user_created'), ('idx_notifications_unread'), ('idx_notifications_incident'),
           ('uq_notifications_event_key'), ('idx_comments_incident_created_at'),
-          ('idx_information_requests_incident_time')
+          ('idx_information_requests_incident_requested')
       ) AS e(index_name)
      WHERE to_regclass('public.' || quote_ident(e.index_name)) IS NULL;
     IF missing_items IS NOT NULL THEN
