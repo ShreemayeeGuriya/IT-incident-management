@@ -1,3 +1,9 @@
+import TopBar from "./components/TopBar";
+
 export default function App() {
-  return <h1>Radar</h1>;
+  return (
+    <div>
+      <TopBar />
+    </div>
+  );
 }
