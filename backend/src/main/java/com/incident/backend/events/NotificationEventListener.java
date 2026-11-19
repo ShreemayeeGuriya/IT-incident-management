@@ -50,12 +50,14 @@ public class NotificationEventListener {
             addStatusRecipients(status, recipients);
         } else if (event instanceof CommentCreatedEvent comment) {
             addCommentRecipients(comment, recipients);
-        } else if (event instanceof AdditionalInformationRequestedEvent request) {
+                    } else if (event instanceof AdditionalInformationRequestedEvent request) {
             add(recipients, request.reporterUserId(), "A technician requested additional information for incident #"
                     + request.incidentId() + ".");
         } else if (event instanceof AdditionalInformationRespondedEvent response) {
             add(recipients, response.requestingTechnicianUserId(), "The reporter responded to an information request for incident #"
                     + response.incidentId() + ".");
+        } else if (event instanceof IncidentEscalatedEvent escalated) {
+            addEscalationRecipients(escalated, recipients);
         } else if (event instanceof SlaObjectiveTransitionEvent sla
                 && sla.newStatus() == SlaObjectiveStatus.BREACHED) {
             addSlaBreachRecipients(sla, recipients);
@@ -119,6 +121,22 @@ public class NotificationEventListener {
         if (incident.getAssignedTechnician() != null) {
             add(recipients, incident.getAssignedTechnician().getUser(), message);
         }
+    }
+
+    private void addEscalationRecipients(IncidentEscalatedEvent event,
+                                         Map<Integer, String> recipients) {
+        Incident incident = incident(event.incidentId());
+        Integer reporterId = incident.getReporter().getId();
+        Integer technicianUserId = incident.getAssignedTechnician() == null ? null
+                : incident.getAssignedTechnician().getUser().getId();
+        String message = "Incident #" + event.incidentId() + " has reached escalation level "
+                + event.escalationLevel() + " after its " + event.objective().name().toLowerCase() + " SLA breach.";
+        userRepository.findByRoleIn(List.of(Role.ADMIN)).forEach(admin -> {
+            Integer adminId = admin.getId();
+            if (!adminId.equals(reporterId) && !adminId.equals(technicianUserId)) {
+                add(recipients, admin, message);
+            }
+        });
     }
 
     private Set<Integer> participants(Integer incidentId) {

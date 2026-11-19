@@ -1,6 +1,6 @@
 # PostgreSQL setup
-
-This guide covers a **new empty database** and an **existing database that predates migrations 001–005**. Do not mix the two paths.
+`schema.sql` includes the final structures represented by migrations 001–005, including comments, notification delivery tracking, separate response/resolution SLA states, incident escalations, and incident information requests. **Do not run migrations 001–005 after applying this baseline.**
+This guide covers a **new empty database** and an **existing database that predates migrations 001–004**. Do not mix the two paths.
 
 ## Prerequisites
 
@@ -25,7 +25,11 @@ Commands below use `radar_itsm` as the example database name and are run from th
    psql -U postgres -d radar_itsm -v ON_ERROR_STOP=1 -f database/schema/schema.sql
    ```
 
+<<<<<<< HEAD
    `schema.sql` includes the final structures represented by migrations 001–005, including comments, notification delivery tracking, separate response/resolution SLA states, and incident information requests. **Do not run migrations 001–005 after applying this baseline.**
+=======
+   `schema.sql` already includes the final structures represented by migrations 001–005, including comments, notification delivery tracking, separate response/resolution SLA states, and incident escalations. **Do not run migrations 001–005 after applying this baseline.**
+>>>>>>> origin/main
 
 3. Add the reference records needed by incident creation:
 
@@ -48,7 +52,11 @@ psql -U postgres -d radar_itsm -v ON_ERROR_STOP=1 -f database/migrations/001_add
 psql -U postgres -d radar_itsm -v ON_ERROR_STOP=1 -f database/migrations/002_create_comments.sql
 psql -U postgres -d radar_itsm -v ON_ERROR_STOP=1 -f database/migrations/003_add_notification_delivery_tracking.sql
 psql -U postgres -d radar_itsm -v ON_ERROR_STOP=1 -f database/migrations/004_add_sla_objective_statuses.sql
+<<<<<<< HEAD
 psql -U postgres -d radar_itsm -v ON_ERROR_STOP=1 -f database/migrations/005_create_incident_information_requests.sql
+=======
+psql -U postgres -d radar_itsm -v ON_ERROR_STOP=1 -f database/migrations/005_create_incident_escalations.sql
+>>>>>>> origin/main
 psql -U postgres -d radar_itsm -v ON_ERROR_STOP=1 -f database/seed/001_reference_data.sql
 ```
 

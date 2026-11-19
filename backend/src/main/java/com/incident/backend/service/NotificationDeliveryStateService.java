@@ -64,6 +64,7 @@ public class NotificationDeliveryStateService {
             case "COMMENT_CREATED" -> "Radar ITSM: New comment on " + subjectIncident;
             case "SLA_RESPONSE_BREACHED" -> "Radar ITSM: Response SLA breached for " + subjectIncident;
             case "SLA_RESOLUTION_BREACHED" -> "Radar ITSM: Resolution SLA breached for " + subjectIncident;
+            case "INCIDENT_ESCALATED" -> "Radar ITSM: Escalation for " + subjectIncident;
             default -> "Radar ITSM: Incident notification";
         };
         var recipient = notification.getUser();

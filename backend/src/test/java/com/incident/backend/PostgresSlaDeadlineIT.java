@@ -26,11 +26,14 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.test.annotation.Rollback;
 import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.sql.Timestamp;
+import java.util.List;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -45,7 +48,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @SpringBootTest
 @ActiveProfiles("postgres-it")
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
-@Import(PostgresTestDatabaseGuard.class)
+@Import({PostgresTestDatabaseGuard.class, IncidentEscalationFailureTestConfiguration.class})
 @AutoConfigureMockMvc
 @Transactional
 @EnabledIfSystemProperty(named = "postgres.integration", matches = "true")
@@ -59,6 +62,7 @@ class PostgresSlaDeadlineIT {
     @Autowired SlaMonitoringService slaMonitoringService;
     @Autowired AuditLogRepository auditLogRepository;
     @Autowired NotificationRepository notificationRepository;
+    @Autowired IncidentEscalationRepository escalationRepository;
     @Autowired SlaMonitorScheduler slaMonitorScheduler;
     @Autowired UserService userService;
     @Autowired IncidentWorkflowService incidentWorkflowService;
@@ -66,6 +70,8 @@ class PostgresSlaDeadlineIT {
     @Autowired ObjectMapper objectMapper;
     @Autowired MockMvc mvc;
     @Autowired JwtService jwtService;
+    @Autowired org.springframework.jdbc.core.JdbcTemplate jdbc;
+    @Autowired jakarta.persistence.EntityManager entityManager;
     @MockitoSpyBean SlaService slaService;
 
     private User reporter() {
@@ -74,6 +80,24 @@ class PostgresSlaDeadlineIT {
         user.setEmail("sla-deadline-" + UUID.randomUUID() + "@example.test");
         user.setPasswordHash("test-hash");
         user.setRole(Role.ADMIN);
+        return userRepository.saveAndFlush(user);
+    }
+
+    private User supportAdmin() {
+        User user = new User();
+        user.setName("SLA escalation admin");
+        user.setEmail("sla-escalation-admin-" + UUID.randomUUID() + "@example.test");
+        user.setPasswordHash("test-hash");
+        user.setRole(Role.ADMIN);
+        return userRepository.saveAndFlush(user);
+    }
+
+    private User employeeReporter() {
+        User user = new User();
+        user.setName("SLA escalation reporter");
+        user.setEmail("sla-escalation-reporter-" + UUID.randomUUID() + "@example.test");
+        user.setPasswordHash("test-hash");
+        user.setRole(Role.EMPLOYEE);
         return userRepository.saveAndFlush(user);
     }
 
@@ -358,5 +382,121 @@ class PostgresSlaDeadlineIT {
                 n.getIncident() == null ? null : n.getIncident().getId())
                 && n.getNotificationType().equals("SLA_RESPONSE_BREACHED")
                 && n.getUser().getId().equals(reporter.getId())).count());
+    }
+
+    @Test
+    @Rollback
+    void responseAndResolutionBreachesCreateDistinctLevelsAndNotifyAdminOncePerLevel() {
+        User reporter = employeeReporter();
+        User admin = supportAdmin();
+        var created = incidentService.create(createRequest(Priority.P1, null), reporter);
+        Integer incidentId = Math.toIntExact(created.id());
+        Instant start = created.createdAt();
+
+        slaMonitoringService.evaluateIncident(incidentId, start.plus(Duration.ofMinutes(5))).orElseThrow();
+        var afterResponseBreach = escalationRepository.findByIncidentIdOrderByEscalationLevelAsc(incidentId);
+        assertEquals(1, afterResponseBreach.size());
+        assertEquals(1, afterResponseBreach.get(0).getEscalationLevel());
+        assertEquals(SlaObjective.RESPONSE, afterResponseBreach.get(0).getTriggerObjective());
+
+        slaMonitoringService.evaluateIncident(incidentId, start.plus(Duration.ofMinutes(30))).orElseThrow();
+        slaMonitoringService.evaluateIncident(incidentId, start.plus(Duration.ofMinutes(35))).orElseThrow();
+
+        var escalations = escalationRepository.findByIncidentIdOrderByEscalationLevelAsc(incidentId);
+        assertEquals(2, escalations.size());
+        assertEquals(List.of(1, 2), escalations.stream().map(IncidentEscalation::getEscalationLevel).toList());
+        assertEquals(List.of(SlaObjective.RESPONSE, SlaObjective.RESOLUTION),
+                escalations.stream().map(IncidentEscalation::getTriggerObjective).toList());
+
+        var history = auditLogRepository.findByIncidentIdOrderByTimestampAscIdAsc(incidentId);
+        List<AuditLog> escalationAudits = history.stream()
+                .filter(a -> "INCIDENT_ESCALATED".equals(a.getAction())).toList();
+        assertEquals(2, escalationAudits.size());
+        assertTrue(escalationAudits.get(0).getNewValue().contains("\"escalationLevel\":\"1\""));
+        assertTrue(escalationAudits.get(1).getNewValue().contains("\"escalationLevel\":\"2\""));
+
+        List<Notification> adminNotifications = notificationRepository.findAll().stream()
+                .filter(n -> incidentId.equals(n.getIncident() == null ? null : n.getIncident().getId()))
+                .filter(n -> "INCIDENT_ESCALATED".equals(n.getNotificationType()))
+                .filter(n -> admin.getId().equals(n.getUser().getId())).toList();
+        assertEquals(2, adminNotifications.size());
+        assertTrue(adminNotifications.get(0).getMessage().contains("level 1"));
+        assertTrue(adminNotifications.get(1).getMessage().contains("level 2"));
+    }
+
+    @Test
+    @Rollback
+    void resolutionObjectiveCanTriggerLevelTwoWithoutResponseLevelOne() {
+        User reporter = reporter();
+        User admin = supportAdmin();
+        var created = incidentService.create(createRequest(Priority.P1, null), reporter);
+        Integer incidentId = Math.toIntExact(created.id());
+        Instant firstResponse = created.responseDeadline().minusSeconds(1);
+        jdbc.update("UPDATE incidents SET first_response_at = ? WHERE incident_id = ?",
+                Timestamp.from(firstResponse), incidentId);
+        entityManager.clear();
+
+        var evaluation = slaMonitoringService.evaluateIncident(incidentId,
+                created.resolutionDeadline().plusMillis(1)).orElseThrow();
+
+        assertEquals(SlaObjectiveStatus.MET, evaluation.responseStatus());
+        assertEquals(SlaObjectiveStatus.BREACHED, evaluation.resolutionStatus());
+        var escalations = escalationRepository.findByIncidentIdOrderByEscalationLevelAsc(incidentId);
+        assertEquals(1, escalations.size());
+        assertEquals(2, escalations.get(0).getEscalationLevel());
+        assertEquals(SlaObjective.RESOLUTION, escalations.get(0).getTriggerObjective());
+        assertEquals(1, notificationRepository.findAll().stream()
+                .filter(n -> incidentId.equals(n.getIncident() == null ? null : n.getIncident().getId()))
+                .filter(n -> "INCIDENT_ESCALATED".equals(n.getNotificationType()))
+                .filter(n -> admin.getId().equals(n.getUser().getId())).count());
+    }
+
+    @Test
+    @Rollback
+    void postgresConflictTolerantInsertCreatesOnlyOneIncidentLevelRecord() {
+        User reporter = reporter();
+        var created = incidentService.create(createRequest(Priority.P1, null), reporter);
+        Integer incidentId = Math.toIntExact(created.id());
+
+        int firstInsert = escalationRepository.insertIfAbsent(incidentId, 1, "RESPONSE", created.createdAt());
+        int repeatedInsert = escalationRepository.insertIfAbsent(incidentId, 1, "RESPONSE", created.createdAt());
+
+        assertEquals(1, firstInsert);
+        assertEquals(0, repeatedInsert);
+        assertEquals(1, escalationRepository.findByIncidentIdOrderByEscalationLevelAsc(incidentId).size());
+    }
+
+    @Test
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
+    void escalationNotificationFailureRollsBackSlaStatusRecordAndAudit() {
+        User reporter = employeeReporter();
+        User admin = supportAdmin();
+        var created = incidentService.create(createRequest(Priority.P1, null), reporter);
+        Integer incidentId = Math.toIntExact(created.id());
+        Instant breachTime = created.responseDeadline().plusMillis(1);
+
+        IncidentEscalationFailureTestConfiguration.FAIL_ESCALATION_NOTIFICATION.set(true);
+        try {
+            assertThrows(RuntimeException.class,
+                    () -> slaMonitoringService.evaluateIncident(incidentId, breachTime));
+            Incident afterRollback = incidentRepository.findById(incidentId).orElseThrow();
+            assertEquals(SlaObjectiveStatus.NOT_STARTED, afterRollback.getResponseSlaStatus());
+            assertTrue(escalationRepository.findByIncidentIdOrderByEscalationLevelAsc(incidentId).isEmpty());
+            assertTrue(auditLogRepository.findByIncidentIdOrderByTimestampAscIdAsc(incidentId).stream()
+                    .noneMatch(a -> "INCIDENT_ESCALATED".equals(a.getAction())
+                            || "SLA_RESPONSE_BREACHED".equals(a.getAction())));
+
+            slaMonitoringService.evaluateIncident(incidentId, breachTime).orElseThrow();
+            assertEquals(1, escalationRepository.findByIncidentIdOrderByEscalationLevelAsc(incidentId).size());
+            assertEquals(1, auditLogRepository.findByIncidentIdOrderByTimestampAscIdAsc(incidentId).stream()
+                    .filter(a -> "INCIDENT_ESCALATED".equals(a.getAction())).count());
+        } finally {
+            IncidentEscalationFailureTestConfiguration.FAIL_ESCALATION_NOTIFICATION.set(false);
+            jdbc.update("DELETE FROM notifications WHERE incident_id = ?", incidentId);
+            jdbc.update("DELETE FROM audit_logs WHERE incident_id = ?", incidentId);
+            jdbc.update("DELETE FROM incident_escalations WHERE incident_id = ?", incidentId);
+            jdbc.update("DELETE FROM incidents WHERE incident_id = ?", incidentId);
+            jdbc.update("DELETE FROM users WHERE user_id IN (?, ?)", reporter.getId(), admin.getId());
+        }
     }
 }

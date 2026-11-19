@@ -97,6 +97,19 @@ Table audit_logs {
   timestamp timestamp [not null]
 }
 
+Table incident_escalations {
+  escalation_id int [pk, increment]
+  incident_id int [not null]
+  escalation_level int [not null]
+  trigger_objective varchar(20) [not null]
+  created_at timestamp [not null]
+
+  indexes {
+    (incident_id, escalation_level) [unique]
+    (incident_id, created_at)
+  }
+}
+
 Table notifications {
   notification_id int [pk, increment]
   user_id int [not null]
@@ -120,6 +133,8 @@ Ref: incidents.sla_policy_id > sla_policies.sla_policy_id
 
 Ref: audit_logs.incident_id > incidents.incident_id
 Ref: audit_logs.actor_user_id > users.user_id
+
+Ref: incident_escalations.incident_id > incidents.incident_id
 
 Ref: notifications.user_id > users.user_id
 Ref: notifications.incident_id > incidents.incident_id
