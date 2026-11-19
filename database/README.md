@@ -1,6 +1,6 @@
 # PostgreSQL setup
 
-This guide covers a **new empty database** and an **existing database that predates migrations 001–005**. Do not mix the two paths.
+This guide covers a **new empty database** and an **existing database that predates migrations 001–006**. Do not mix the two paths.
 
 ## Prerequisites
 
@@ -25,7 +25,7 @@ Commands below use `radar_itsm` as the example database name and are run from th
    psql -U postgres -d radar_itsm -v ON_ERROR_STOP=1 -f database/schema/schema.sql
    ```
 
-   `schema.sql` already includes the final structures represented by migrations 001–005, including comments, notification delivery tracking, separate response/resolution SLA states, and incident escalations. **Do not run migrations 001–005 after applying this baseline.**
+   `schema.sql` includes the final structures represented by migrations 001–006, including comments, notification delivery tracking, independent SLA objective states, incident escalations, and information requests. **Do not run migrations 001–006 after applying this baseline.**
 
 3. Add the reference records needed by incident creation:
 
@@ -49,10 +49,11 @@ psql -U postgres -d radar_itsm -v ON_ERROR_STOP=1 -f database/migrations/002_cre
 psql -U postgres -d radar_itsm -v ON_ERROR_STOP=1 -f database/migrations/003_add_notification_delivery_tracking.sql
 psql -U postgres -d radar_itsm -v ON_ERROR_STOP=1 -f database/migrations/004_add_sla_objective_statuses.sql
 psql -U postgres -d radar_itsm -v ON_ERROR_STOP=1 -f database/migrations/005_create_incident_escalations.sql
+psql -U postgres -d radar_itsm -v ON_ERROR_STOP=1 -f database/migrations/006_create_incident_information_requests.sql
 psql -U postgres -d radar_itsm -v ON_ERROR_STOP=1 -f database/seed/001_reference_data.sql
 ```
 
-Migrations 002, 003, and 004 have explicit transaction boundaries. Migration 001 is one atomic `ALTER TABLE` statement. `ON_ERROR_STOP=1` makes `psql` stop if a statement fails; an open migration transaction is rolled back when the connection closes. Migrations 002–004 are not rerunnable; check the current schema before retrying any migration that may have partially or fully run.
+Migrations 002–006 have explicit transaction boundaries. Migration 001 is one atomic `ALTER TABLE` statement. `ON_ERROR_STOP=1` makes `psql` stop if a statement fails; an open migration transaction is rolled back when the connection closes. Migrations 002–006 are not rerunnable; check the current schema before retrying any migration that may have partially or fully run.
 
 This repository does not use a migration runner or record migration versions in a database ledger. Numeric filenames define the order. The schema verifier checks the resulting schema shape, not the historical execution record.
 

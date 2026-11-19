@@ -22,7 +22,7 @@ Required connection settings are `DB_URL`, `DB_USERNAME`, and `DB_PASSWORD`. `JW
 
 ## Database setup
 
-Follow [database/README.md](database/README.md) for the distinct fresh-database and existing-database procedures. For a new database, apply `database/schema/schema.sql` once, then `database/seed/001_reference_data.sql`. The baseline already contains the schema changes from migrations 001–004; do not apply those migrations after the baseline.
+Follow [database/README.md](database/README.md) for the distinct fresh-database and existing-database procedures. For a new database, apply `database/schema/schema.sql` once, then `database/seed/001_reference_data.sql`. The baseline includes the current migration structures through 006; do not apply those migrations after the baseline.
 
 ## Run the backend
 
