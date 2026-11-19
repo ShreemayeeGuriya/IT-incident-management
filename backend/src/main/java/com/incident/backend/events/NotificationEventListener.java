@@ -50,6 +50,12 @@ public class NotificationEventListener {
             addStatusRecipients(status, recipients);
         } else if (event instanceof CommentCreatedEvent comment) {
             addCommentRecipients(comment, recipients);
+                    } else if (event instanceof AdditionalInformationRequestedEvent request) {
+            add(recipients, request.reporterUserId(), "A technician requested additional information for incident #"
+                    + request.incidentId() + ".");
+        } else if (event instanceof AdditionalInformationRespondedEvent response) {
+            add(recipients, response.requestingTechnicianUserId(), "The reporter responded to an information request for incident #"
+                    + response.incidentId() + ".");
         } else if (event instanceof IncidentEscalatedEvent escalated) {
             addEscalationRecipients(escalated, recipients);
         } else if (event instanceof SlaObjectiveTransitionEvent sla

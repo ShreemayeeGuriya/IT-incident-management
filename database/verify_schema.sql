@@ -12,7 +12,11 @@ BEGIN
       INTO missing_items
       FROM (VALUES
           ('users'), ('technicians'), ('skills'), ('technician_skills'),
-          ('categories'), ('services'), ('sla_policies'), ('incidents'), ('incident_escalations'),
+                    ('categories'), ('services'), ('sla_policies'), ('incidents'),
+          ('incident_escalations'), ('comments'), ('audit_logs'),
+          ('notifications'), ('incident_information_requests')
+      ) AS e(table_name)
+          ('categories'), ('services'), ('sla_policies'), ('incidents'),
           ('comments'), ('audit_logs'), ('notifications')
       ) AS e(table_name)
      WHERE to_regclass('public.' || quote_ident(e.table_name)) IS NULL;
@@ -43,7 +47,12 @@ BEGIN
           ('audit_logs','new_value'), ('audit_logs','description'), ('audit_logs','timestamp'),
           ('notifications','notification_id'), ('notifications','user_id'), ('notifications','incident_id'), ('notifications','message'),
           ('notifications','notification_type'), ('notifications','delivery_status'), ('notifications','is_read'), ('notifications','created_at'),
-          ('notifications','read_at'), ('notifications','event_key'), ('notifications','delivery_attempts'), ('notifications','last_delivery_error')
+          ('notifications','read_at'), ('notifications','event_key'), ('notifications','delivery_attempts'), ('notifications','last_delivery_error'),
+          ('incident_information_requests','information_request_id'), ('incident_information_requests','incident_id'),
+          ('incident_information_requests','requesting_technician_user_id'), ('incident_information_requests','reporter_user_id'),
+          ('incident_information_requests','request_message'), ('incident_information_requests','requested_at'),
+          ('incident_information_requests','response_status'), ('incident_information_requests','response_message'),
+          ('incident_information_requests','responded_at')
       ) AS e(table_name, column_name)
      WHERE NOT EXISTS (
          SELECT 1 FROM information_schema.columns c
@@ -78,7 +87,14 @@ BEGIN
           ('audit_logs','audit_logs_pkey','p'), ('audit_logs','fk_audit_logs_incident','f'), ('audit_logs','fk_audit_logs_actor','f'),
           ('notifications','notifications_pkey','p'), ('notifications','fk_notifications_user','f'), ('notifications','fk_notifications_incident','f'),
           ('notifications','chk_notifications_delivery_status','c'), ('notifications','chk_notifications_read_timestamp','c'),
-          ('notifications','chk_notifications_delivery_attempts','c')
+          ('notifications','chk_notifications_delivery_attempts','c'),
+          ('incident_information_requests','incident_information_requests_pkey','p'),
+          ('incident_information_requests','fk_information_requests_incident','f'),
+          ('incident_information_requests','fk_information_requests_technician','f'),
+          ('incident_information_requests','fk_information_requests_reporter','f'),
+          ('incident_information_requests','chk_information_requests_status','c'),
+          ('incident_information_requests','chk_information_requests_response','c'),
+          ('incident_information_requests','chk_information_requests_messages','c')
       ) AS e(table_name, constraint_name, constraint_type)
      WHERE NOT EXISTS (
          SELECT 1 FROM pg_constraint c
@@ -101,7 +117,8 @@ BEGIN
           ('idx_incidents_resolution_deadline'), ('idx_incident_escalations_incident_created'),
           ('idx_audit_logs_incident_timestamp'), ('idx_audit_logs_actor_timestamp'),
           ('idx_notifications_user_created'), ('idx_notifications_unread'), ('idx_notifications_incident'),
-          ('uq_notifications_event_key'), ('idx_comments_incident_created_at')
+          ('uq_notifications_event_key'), ('idx_comments_incident_created_at'),
+          ('idx_information_requests_incident_requested')
       ) AS e(index_name)
      WHERE to_regclass('public.' || quote_ident(e.index_name)) IS NULL;
     IF missing_items IS NOT NULL THEN
