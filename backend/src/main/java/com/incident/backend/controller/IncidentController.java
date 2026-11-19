@@ -7,6 +7,9 @@ import com.incident.backend.dto.CommentResponse;
 import com.incident.backend.dto.IncidentCreateRequest;
 import com.incident.backend.dto.IncidentResponse;
 import com.incident.backend.dto.IncidentUpdateRequest;
+import com.incident.backend.dto.InformationRequestCreateRequest;
+import com.incident.backend.dto.InformationResponseCreateRequest;
+import com.incident.backend.dto.IncidentInformationRequestResponse;
 import com.incident.backend.dto.DuplicateIncidentCheckRequest;
 import com.incident.backend.dto.DuplicateIncidentSuggestion;
 import com.incident.backend.dto.PageResponse;
@@ -19,6 +22,7 @@ import com.incident.backend.service.AuditLogService;
 import com.incident.backend.service.IncidentService;
 import com.incident.backend.service.IncidentWorkflowService;
 import com.incident.backend.service.DuplicateIncidentService;
+import com.incident.backend.service.IncidentInformationRequestService;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -46,16 +50,19 @@ public class IncidentController {
     private final CommentService commentService;
     private final AuditLogService auditLogService;
     private final DuplicateIncidentService duplicateIncidentService;
+    private final IncidentInformationRequestService informationRequestService;
 
     public IncidentController(IncidentService incidentService,
                               IncidentWorkflowService workflowService,
                               CommentService commentService, AuditLogService auditLogService,
-                              DuplicateIncidentService duplicateIncidentService) {
+                              DuplicateIncidentService duplicateIncidentService,
+                              IncidentInformationRequestService informationRequestService) {
         this.incidentService = incidentService;
         this.workflowService = workflowService;
         this.commentService = commentService;
         this.auditLogService = auditLogService;
         this.duplicateIncidentService = duplicateIncidentService;
+        this.informationRequestService = informationRequestService;
     }
 
     @PostMapping
@@ -139,5 +146,28 @@ public class IncidentController {
                                                       @AuthenticationPrincipal UserPrincipal p) {
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(commentService.add(id, request.text(), p.getUser()));
+    }
+
+    @PostMapping("/{id}/information-requests")
+    @PreAuthorize("hasRole('TECHNICIAN')")
+    public ResponseEntity<IncidentInformationRequestResponse> requestInformation(@PathVariable Long id,
+            @Valid @RequestBody InformationRequestCreateRequest request,
+            @AuthenticationPrincipal UserPrincipal p) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(
+                informationRequestService.request(id, request.message(), p.getUser()));
+    }
+
+    @PostMapping("/{id}/information-requests/{requestId}/response")
+    @PreAuthorize("hasRole('EMPLOYEE')")
+    public IncidentInformationRequestResponse respondToInformationRequest(@PathVariable Long id,
+            @PathVariable Long requestId, @Valid @RequestBody InformationResponseCreateRequest request,
+            @AuthenticationPrincipal UserPrincipal p) {
+        return informationRequestService.respond(id, requestId, request.message(), p.getUser());
+    }
+
+    @GetMapping("/{id}/information-requests")
+    public List<IncidentInformationRequestResponse> informationRequests(@PathVariable Long id,
+            @AuthenticationPrincipal UserPrincipal p) {
+        return informationRequestService.list(id, p.getUser());
     }
 }

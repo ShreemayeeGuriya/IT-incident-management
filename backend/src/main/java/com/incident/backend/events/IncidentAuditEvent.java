@@ -7,7 +7,8 @@ import java.util.UUID;
 /** Immutable, entity-free snapshot published inside the business transaction. */
 public sealed interface IncidentAuditEvent permits IncidentCreatedEvent, IncidentUpdatedEvent,
         TechnicianAssignmentChangedEvent, IncidentStatusChangedEvent, CommentCreatedEvent,
-        SlaObjectiveTransitionEvent {
+        SlaObjectiveTransitionEvent, AdditionalInformationRequestedEvent,
+        AdditionalInformationRespondedEvent {
     UUID eventId();
     Integer incidentId();
     Integer actorUserId();
