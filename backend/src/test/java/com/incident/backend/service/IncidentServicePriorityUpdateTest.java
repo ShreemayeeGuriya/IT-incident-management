@@ -42,6 +42,7 @@ class IncidentServicePriorityUpdateTest {
     @Mock IncidentAccess access;
     @Mock ApplicationEventPublisher eventPublisher;
     @Mock AuditLogRepository auditLogRepository;
+    @Mock IncidentWorkflowService workflowService;
 
     private final PriorityCalculator calculator = new PriorityCalculator(
             List.of(new WeightedScorePriorityStrategy(), new ImpactUrgencyMatrixPriorityStrategy()),
@@ -57,7 +58,7 @@ class IncidentServicePriorityUpdateTest {
     @BeforeEach
     void setUp() {
         service = new IncidentService(incidentRepository, userRepository, categoryRepository, serviceRepository,
-                slaService, calculator, access, eventPublisher, auditLogRepository);
+                slaService, calculator, access, eventPublisher, auditLogRepository, workflowService);
         incident = new Incident();
         incident.setDescription("Original");
         incident.setImpact(Impact.MEDIUM);

@@ -89,11 +89,9 @@ class PostgresIncidentLifecycleIT {
                 null, null, "Restarted the payment gateway", null), actor);
     }
 
-    /** REPORTED -> CLASSIFIED -> PRIORITIZED -> (assign) ASSIGNED. */
+    /** Creation advances through CLASSIFIED and PRIORITIZED, then assignment moves to ASSIGNED. */
     private long assignedIncident(User admin, Technician technician) {
         long id = newIncident(admin);
-        move(id, CLASSIFIED, admin);
-        move(id, PRIORITIZED, admin);
         workflowService.assign(id, technician.getId().longValue(), admin);
         return id;
     }
@@ -137,8 +135,8 @@ class PostgresIncidentLifecycleIT {
 
         InvalidStateTransitionException ex = assertThrows(InvalidStateTransitionException.class,
                 () -> move(id, CLOSED, admin));
-        assertEquals(REPORTED, ex.getFrom());
-        assertEquals(REPORTED, reload(id).getStatus());
+        assertEquals(PRIORITIZED, ex.getFrom());
+        assertEquals(PRIORITIZED, reload(id).getStatus());
         assertEquals(auditsBefore, auditLogRepository.countByIncidentId(Math.toIntExact(id)));
     }
 
@@ -148,7 +146,7 @@ class PostgresIncidentLifecycleIT {
         User admin = user(Role.ADMIN);
         long id = newIncident(admin);
         long auditsBefore = auditLogRepository.countByIncidentId(Math.toIntExact(id));
-        assertEquals(REPORTED, move(id, REPORTED, admin).status());
+        assertEquals(PRIORITIZED, move(id, PRIORITIZED, admin).status());
         assertEquals(auditsBefore, auditLogRepository.countByIncidentId(Math.toIntExact(id)));
     }
 
@@ -157,8 +155,6 @@ class PostgresIncidentLifecycleIT {
     void assignedRequiresATechnicianWhenSetThroughTheStatusEndpoint() {
         User admin = user(Role.ADMIN);
         long id = newIncident(admin);
-        move(id, CLASSIFIED, admin);
-        move(id, PRIORITIZED, admin);
         assertThrows(InvalidStateTransitionException.class, () -> move(id, ASSIGNED, admin));
         assertEquals(PRIORITIZED, reload(id).getStatus());
     }
@@ -177,11 +173,11 @@ class PostgresIncidentLifecycleIT {
 
     @Test
     @Rollback
-    void assigningBeforePrioritizationKeepsTheStatus() {
+    void assigningPrioritizedIncidentMovesItToAssigned() {
         User admin = user(Role.ADMIN);
         long id = newIncident(admin);
         workflowService.assign(id, technician(admin).getId().longValue(), admin);
-        assertEquals(REPORTED, reload(id).getStatus());
+        assertEquals(ASSIGNED, reload(id).getStatus());
         assertNotNull(reload(id).getAssignedTechnician());
     }
 
@@ -260,9 +256,9 @@ class PostgresIncidentLifecycleIT {
                         .content("{\"status\":\"CLOSED\"}"))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.status").value(409))
-                .andExpect(jsonPath("$.fieldErrors.from").value("REPORTED"))
+                .andExpect(jsonPath("$.fieldErrors.from").value("PRIORITIZED"))
                 .andExpect(jsonPath("$.fieldErrors.to").value("CLOSED"))
-                .andExpect(jsonPath("$.fieldErrors.allowedNext").value("[CLASSIFIED]"));
+                .andExpect(jsonPath("$.fieldErrors.allowedNext").value("[ASSIGNED]"));
     }
 
     @Test
@@ -270,11 +266,16 @@ class PostgresIncidentLifecycleIT {
     void apiAcceptsAValidTransition() throws Exception {
         User admin = user(Role.ADMIN);
         long id = newIncident(admin);
+        Incident incident = reload(id);
+        incident.setAssignedTechnician(technician(admin));
+        incidentRepository.saveAndFlush(incident);
+
         mvc.perform(patch("/api/incidents/{id}/status", id)
                         .header("Authorization", "Bearer " + jwtService.generateToken(admin))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"status\":\"CLASSIFIED\"}"))
+                        .content("{\"status\":\"ASSIGNED\"}"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.status").value("CLASSIFIED"));
+                .andExpect(jsonPath("$.status").value("ASSIGNED"));
+        assertEquals(ASSIGNED, reload(id).getStatus());
     }
 }

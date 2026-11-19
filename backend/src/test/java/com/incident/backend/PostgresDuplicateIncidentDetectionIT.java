@@ -106,7 +106,7 @@ class PostgresDuplicateIncidentDetectionIT {
                 .andExpect(jsonPath("$[0].description").value("Email server unavailable for all users"))
                 .andExpect(jsonPath("$[0].category").value(category.getName()))
                 .andExpect(jsonPath("$[0].service").value(service.getName()))
-                .andExpect(jsonPath("$[0].status").value("REPORTED"))
+                .andExpect(jsonPath("$[0].status").value("PRIORITIZED"))
                 .andExpect(jsonPath("$[0].similarityScore").isNumber());
 
         var noMatchRequest = new DuplicateIncidentCheckRequest("Printer toner needs replacement",

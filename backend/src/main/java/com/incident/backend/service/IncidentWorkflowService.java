@@ -113,7 +113,8 @@ public class IncidentWorkflowService {
             publishAssignmentChanged(saved, actor, oldTechnicianId, newTechnicianId);
         }
         if (nextStatus != null) {
-            publishStatusChanged(saved, actor, status, nextStatus);
+            publishStatusChanged(saved, actor, status, nextStatus,
+                    "Incident status changed from " + status + " to " + nextStatus);
         }
         return IncidentResponse.from(saved);
     }
@@ -134,6 +135,23 @@ public class IncidentWorkflowService {
             return IncidentResponse.from(incident);
         }
 
+        return transitionAndSave(incident, target, actor,
+                "Incident status changed from " + previousStatus + " to " + target);
+    }
+
+    /** Automatically advances a newly created incident through classification and prioritization. */
+    public IncidentResponse advanceCreationToPrioritized(Long incidentId, User actor) {
+        Incident incident = access.findForUpdate(incidentId);
+        transitionAndSave(incident, IncidentStatus.CLASSIFIED, actor,
+                "Automatically advanced incident from REPORTED to CLASSIFIED during creation");
+        return transitionAndSave(incident, IncidentStatus.PRIORITIZED, actor,
+                "Automatically advanced incident from CLASSIFIED to PRIORITIZED during creation");
+    }
+
+    private IncidentResponse transitionAndSave(Incident incident, IncidentStatus target, User actor,
+                                               String auditDescription) {
+        IncidentStatus previousStatus = incident.getStatus();
+
         lifecycle.transition(incident, target);
 
         // Going back from ASSIGNED to PRIORITIZED releases the technician.
@@ -149,7 +167,7 @@ public class IncidentWorkflowService {
         if (released) {
             publishAssignmentChanged(saved, actor, oldTechnicianId, null);
         }
-        publishStatusChanged(saved, actor, previousStatus, target);
+        publishStatusChanged(saved, actor, previousStatus, target, auditDescription);
         return IncidentResponse.from(saved);
     }
 
@@ -178,9 +196,10 @@ public class IncidentWorkflowService {
                         ? "Technician unassigned" : "Technician assignment changed"));
     }
 
-    private void publishStatusChanged(Incident incident, User actor, IncidentStatus from, IncidentStatus to) {
+    private void publishStatusChanged(Incident incident, User actor, IncidentStatus from, IncidentStatus to,
+                                      String description) {
         eventPublisher.publishEvent(new IncidentStatusChangedEvent(UUID.randomUUID(), incident.getId(),
-                actorId(actor), Instant.now(), from.name(), to.name()));
+                actorId(actor), Instant.now(), from.name(), to.name(), description));
     }
 
     private static Integer technicianIdOf(Incident incident) {
