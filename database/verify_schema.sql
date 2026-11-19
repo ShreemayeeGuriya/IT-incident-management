@@ -12,12 +12,10 @@ BEGIN
       INTO missing_items
       FROM (VALUES
           ('users'), ('technicians'), ('skills'), ('technician_skills'),
-                    ('categories'), ('services'), ('sla_policies'), ('incidents'),
+          ('categories'), ('services'), ('sla_policies'), ('incidents'),
           ('incident_escalations'), ('comments'), ('audit_logs'),
           ('notifications'), ('incident_information_requests')
       ) AS e(table_name)
-          ('categories'), ('services'), ('sla_policies'), ('incidents'),
-          ('comments'), ('audit_logs'), ('notifications')
       ) AS e(table_name)
      WHERE to_regclass('public.' || quote_ident(e.table_name)) IS NULL;
     IF missing_items IS NOT NULL THEN
@@ -92,9 +90,10 @@ BEGIN
           ('incident_information_requests','fk_information_requests_incident','f'),
           ('incident_information_requests','fk_information_requests_technician','f'),
           ('incident_information_requests','fk_information_requests_reporter','f'),
-          ('incident_information_requests','chk_information_requests_status','c'),
-          ('incident_information_requests','chk_information_requests_response','c'),
-          ('incident_information_requests','chk_information_requests_messages','c')
+          ('incident_information_requests','chk_information_request_status','c'),
+          ('incident_information_requests','chk_information_request_response','c'),
+          ('incident_information_requests','chk_information_request_message','c'),
+          ('incident_information_requests','chk_information_response_message','c')
       ) AS e(table_name, constraint_name, constraint_type)
      WHERE NOT EXISTS (
          SELECT 1 FROM pg_constraint c

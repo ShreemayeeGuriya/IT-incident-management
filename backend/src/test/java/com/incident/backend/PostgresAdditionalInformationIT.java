@@ -1,13 +1,17 @@
 package com.incident.backend;
 
+
 import com.fasterxml.jackson.databind.ObjectMapper;
+
 import com.incident.backend.dto.IncidentCreateRequest;
 import com.incident.backend.model.*;
 import com.incident.backend.repository.*;
 import com.incident.backend.security.JwtService;
 import com.incident.backend.service.IncidentService;
 import com.incident.backend.service.IncidentWorkflowService;
+
 import com.incident.backend.service.UserService;
+
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfSystemProperty;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -15,6 +19,7 @@ import org.springframework.boot.test.autoconfigure.jdbc.AutoConfigureTestDatabas
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
+
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.http.MediaType;
@@ -27,6 +32,7 @@ import java.util.List;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
+
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -40,6 +46,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @Transactional
 @EnabledIfSystemProperty(named = "postgres.integration", matches = "true")
 class PostgresAdditionalInformationIT {
+
     @Autowired MockMvc mvc;
     @Autowired ObjectMapper objectMapper;
     @Autowired IncidentService incidentService;
@@ -60,10 +67,12 @@ class PostgresAdditionalInformationIT {
         User user = new User();
         user.setName("Additional info " + label);
         user.setEmail("additional-info-" + label + "-" + UUID.randomUUID() + "@example.test");
+
         user.setPasswordHash("test-hash");
         user.setRole(role);
         return userRepository.saveAndFlush(user);
     }
+
 
     private User technician(User admin) {
         User employee = user("technician", Role.EMPLOYEE);
@@ -92,10 +101,12 @@ class PostgresAdditionalInformationIT {
                 .andExpect(status().isCreated()).andExpect(jsonPath("$.status").value("OPEN"))
                 .andReturn().getResponse().getContentAsString();
         return objectMapper.readTree(response).get("id").asLong();
+
     }
 
     @Test
     @Rollback
+
     void requestAndResponsePersistNotifyActorsAndAppearInIncidentAudit() throws Exception {
         User admin = user("admin", Role.ADMIN);
         User reporter = user("reporter", Role.EMPLOYEE);
@@ -146,10 +157,12 @@ class PostgresAdditionalInformationIT {
                 .equals("ADDITIONAL_INFORMATION_REQUESTED") && n.getIncident().getId().longValue() == incidentId));
         assertTrue(techNotifications.stream().anyMatch(n -> n.getNotificationType()
                 .equals("ADDITIONAL_INFORMATION_RESPONDED") && n.getIncident().getId().longValue() == incidentId));
+
     }
 
     @Test
     @Rollback
+
     void enforcesAssignedTechnicianAndReporterOwnership() throws Exception {
         User admin = user("admin", Role.ADMIN);
         User reporter = user("reporter", Role.EMPLOYEE);
@@ -158,10 +171,11 @@ class PostgresAdditionalInformationIT {
         User otherTech = technician(admin);
         long incidentId = assignedIncident(reporter, admin, tech);
 
-        mvc.perform(post("/api/incidents/{id}/information-requests", incidentId)
-                        .header("Authorization", bearer(otherTech)).contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"message\":\"Please send details\"}"))
-                .andExpect(status().isForbidden());
+       mvc.perform(post("/api/incidents/{id}/information-requests", incidentId)
+                .header("Authorization", bearer(reporter))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"message\":\"Please send more details\"}"))
+        .andExpect(status().isForbidden());;
 
         long requestId = createRequest(incidentId, tech);
         mvc.perform(post("/api/incidents/{id}/information-requests/{requestId}/response", incidentId, requestId)
@@ -200,5 +214,6 @@ class PostgresAdditionalInformationIT {
                 .andExpect(status().isConflict());
         assertEquals(1, auditLogRepository.findByIncidentIdOrderByTimestampAscIdAsc(Math.toIntExact(incidentId))
                 .stream().filter(a -> a.getAction().equals("ADDITIONAL_INFORMATION_RESPONDED")).count());
+
     }
 }

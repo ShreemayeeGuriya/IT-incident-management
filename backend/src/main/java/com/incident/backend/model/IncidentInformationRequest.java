@@ -59,7 +59,7 @@ public class IncidentInformationRequest {
     public String getResponseMessage() { return responseMessage; }
     public Instant getRespondedAt() { return respondedAt; }
 
-    public void respond(String message, Instant at) {
+      public void respond(String message, Instant at) {
         this.responseMessage = message;
         this.respondedAt = at;
         this.status = InformationRequestStatus.RESPONDED;

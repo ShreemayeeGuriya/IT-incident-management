@@ -104,8 +104,8 @@ public class IncidentService {
     }
 
     @Transactional(readOnly = true)
-    public PageResponse<IncidentResponse> list(Priority priority, IncidentStatus status, Long technicianId,
-                                               String search, int page, int size, String sortBy,
+    public PageResponse<IncidentResponse> list(Priority priority, IncidentStatus status, Long categoryId,
+                                               Long technicianId, String search, int page, int size, String sortBy,
                                                String direction, User current) {
         if (!SORT_FIELDS.contains(sortBy)) throw new BadRequestException("sortBy must be one of " + SORT_FIELDS);
         if (!direction.equalsIgnoreCase("asc") && !direction.equalsIgnoreCase("desc")) {
@@ -114,12 +114,27 @@ public class IncidentService {
         if (page < 0) throw new BadRequestException("page must be 0 or more");
         int pageSize = Math.min(Math.max(size, 1), 100);
 
+        Integer categoryFilterId = null;
+        if (categoryId != null) {
+            if (categoryId <= 0) throw new BadRequestException("categoryId must be a positive integer");
+            try {
+                categoryFilterId = Math.toIntExact(categoryId);
+            } catch (ArithmeticException ex) {
+                throw new BadRequestException("categoryId must be a positive integer");
+            }
+            category(categoryFilterId);
+        }
+
         Specification<Incident> spec = (root, query, cb) -> cb.conjunction();
         if (!IncidentAccess.isStaff(current)) {
             spec = spec.and((root, q, cb) -> cb.equal(root.get("reporter").get("id"), current.getId()));
         }
         if (priority != null) spec = spec.and((root, q, cb) -> cb.equal(root.get("priority"), priority));
         if (status != null) spec = spec.and((root, q, cb) -> cb.equal(root.get("status"), status));
+        if (categoryFilterId != null) {
+            int id = categoryFilterId;
+            spec = spec.and((root, q, cb) -> cb.equal(root.get("category").get("id"), id));
+        }
         if (technicianId != null) {
             int id = Math.toIntExact(technicianId);
             spec = spec.and((root, q, cb) -> cb.equal(root.get("assignedTechnician").get("id"), id));
