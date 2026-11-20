@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.incident.backend.dto.IncidentCreateRequest;
 import com.incident.backend.dto.IncidentUpdateRequest;
+import com.incident.backend.dto.StateChangeRequest;
 import com.incident.backend.exception.BadRequestException;
 import com.incident.backend.model.*;
 import com.incident.backend.repository.*;
@@ -340,7 +341,7 @@ class PostgresSlaDeadlineIT {
 
     @Test
     @Rollback
-    void schedulerAuditsApproachingTransitionAndNotifiesOnlyOnBreachOnce() {
+    void schedulerWarnsOncePerObjectiveAndThenNotifiesOnceWhenEachObjectiveBreaches() {
         User reporter = reporter();
         var created = incidentService.create(createRequest(Priority.P1, null), reporter);
         Integer incidentId = Math.toIntExact(created.id());
@@ -359,9 +360,17 @@ class PostgresSlaDeadlineIT {
         slaMonitorScheduler.runMonitoringCycle(start.plus(Duration.ofMinutes(4)));
         var afterApproaching = auditLogRepository.findByIncidentIdOrderByTimestampAscIdAsc(incidentId);
         assertTrue(afterApproaching.stream().anyMatch(a -> a.getAction().equals("SLA_RESPONSE_APPROACHING_BREACH")));
-        assertFalse(notificationRepository.findAll().stream().anyMatch(n -> incidentId.equals(
-                n.getIncident() == null ? null : n.getIncident().getId())
-                && n.getNotificationType().equals("SLA_RESPONSE_APPROACHING_BREACH")));
+        assertEquals(1, countSlaNotifications(incidentId, "SLA_RESPONSE_APPROACHING_BREACH", reporter.getId()));
+        assertEquals(1, countSlaNotifications(incidentId, "SLA_RESPONSE_APPROACHING_BREACH", technicianUserId));
+
+        // Replaying the transition (as could happen after a status reset or retried delivery)
+        // uses the same durable event key for this incident, objective, and deadline.
+        Incident responseReset = incidentRepository.findById(incidentId).orElseThrow();
+        responseReset.setResponseSlaStatus(SlaObjectiveStatus.WITHIN_SLA);
+        incidentRepository.saveAndFlush(responseReset);
+        slaMonitorScheduler.runMonitoringCycle(start.plus(Duration.ofMinutes(4)));
+        assertEquals(1, countSlaNotifications(incidentId, "SLA_RESPONSE_APPROACHING_BREACH", reporter.getId()));
+        assertEquals(1, countSlaNotifications(incidentId, "SLA_RESPONSE_APPROACHING_BREACH", technicianUserId));
 
         slaMonitorScheduler.runMonitoringCycle(start.plus(Duration.ofMinutes(5)));
         var afterBreach = auditLogRepository.findByIncidentIdOrderByTimestampAscIdAsc(incidentId);
@@ -382,6 +391,54 @@ class PostgresSlaDeadlineIT {
                 n.getIncident() == null ? null : n.getIncident().getId())
                 && n.getNotificationType().equals("SLA_RESPONSE_BREACHED")
                 && n.getUser().getId().equals(reporter.getId())).count());
+
+        slaMonitorScheduler.runMonitoringCycle(start.plus(Duration.ofMinutes(24)));
+        assertEquals(1, countSlaNotifications(incidentId, "SLA_RESOLUTION_APPROACHING_BREACH", reporter.getId()));
+        assertEquals(1, countSlaNotifications(incidentId, "SLA_RESOLUTION_APPROACHING_BREACH", technicianUserId));
+        slaMonitorScheduler.runMonitoringCycle(start.plus(Duration.ofMinutes(25)));
+        assertEquals(1, countSlaNotifications(incidentId, "SLA_RESOLUTION_APPROACHING_BREACH", reporter.getId()));
+        assertEquals(1, countSlaNotifications(incidentId, "SLA_RESOLUTION_APPROACHING_BREACH", technicianUserId));
+
+        slaMonitorScheduler.runMonitoringCycle(start.plus(Duration.ofMinutes(30)));
+        assertEquals(1, countSlaNotifications(incidentId, "SLA_RESOLUTION_BREACHED", reporter.getId()));
+        assertEquals(1, countSlaNotifications(incidentId, "SLA_RESOLUTION_BREACHED", technicianUserId));
+        assertEquals(1, countSlaNotifications(incidentId, "SLA_RESOLUTION_APPROACHING_BREACH", reporter.getId()));
+        assertEquals(1, countSlaNotifications(incidentId, "SLA_RESOLUTION_APPROACHING_BREACH", technicianUserId));
+    }
+
+    private long countSlaNotifications(Integer incidentId, String type, Integer userId) {
+        return notificationRepository.countByIncidentIdAndNotificationTypeAndUserId(incidentId, type, userId);
+    }
+
+    @Test
+    @Rollback
+    void completedIncidentObjectivesDoNotGenerateApproachingWarnings() {
+        User reporter = reporter();
+        var created = incidentService.create(createRequest(Priority.P1, null), reporter);
+        User technicianUser = new User();
+        technicianUser.setName("Completed SLA technician");
+        technicianUser.setEmail("sla-completed-tech-" + UUID.randomUUID() + "@example.test");
+        technicianUser.setPasswordHash("test-hash");
+        technicianUser.setRole(Role.TECHNICIAN);
+        technicianUser = userRepository.saveAndFlush(technicianUser);
+        Technician technician = technicianRepository.saveAndFlush(new Technician(technicianUser));
+        incidentWorkflowService.assign(created.id(), technician.getId().longValue(), reporter);
+        incidentWorkflowService.changeState(created.id(), new StateChangeRequest(IncidentStatus.INVESTIGATING), reporter);
+        incidentService.update(created.id(), new IncidentUpdateRequest(null, null, null, null,
+                null, null, null, null, null, "Service restored", null), reporter);
+        incidentWorkflowService.changeState(created.id(), new StateChangeRequest(IncidentStatus.RESOLVED), reporter);
+
+        Instant evaluationTime = created.createdAt().plus(Duration.ofMinutes(4));
+        slaMonitorScheduler.runMonitoringCycle(evaluationTime);
+        Integer incidentId = Math.toIntExact(created.id());
+        assertEquals(0, countSlaNotifications(incidentId, "SLA_RESPONSE_APPROACHING_BREACH", reporter.getId()));
+        assertEquals(0, countSlaNotifications(incidentId, "SLA_RESOLUTION_APPROACHING_BREACH", reporter.getId()));
+
+        incidentWorkflowService.changeState(created.id(), new StateChangeRequest(IncidentStatus.VERIFIED), reporter);
+        incidentWorkflowService.changeState(created.id(), new StateChangeRequest(IncidentStatus.CLOSED), reporter);
+        slaMonitorScheduler.runMonitoringCycle(evaluationTime);
+        assertEquals(0, countSlaNotifications(incidentId, "SLA_RESPONSE_APPROACHING_BREACH", reporter.getId()));
+        assertEquals(0, countSlaNotifications(incidentId, "SLA_RESOLUTION_APPROACHING_BREACH", reporter.getId()));
     }
 
     @Test

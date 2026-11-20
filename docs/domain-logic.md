@@ -76,6 +76,10 @@ Ties are broken by fewer open incidents, then the lower technician id, so result
 
 **Workload** counts incidents that are REPORTED, CLASSIFIED, PRIORITIZED, ASSIGNED or INVESTIGATING. RESOLVED incidents are excluded, because they only wait for the reporter to verify.
 
+## Additional information requests
+
+The assigned technician can ask the incident reporter for more details while the incident is ASSIGNED or INVESTIGATING. The reporter can submit one response to each open request. Requests and responses are stored separately from comments, audited as `ADDITIONAL_INFORMATION_REQUESTED` and `ADDITIONAL_INFORMATION_RESPONDED`, and create in-app notifications for the other participant. They do not change the incident lifecycle state. The endpoints are listed in the API reference.
+
 **Skills** are stored in the existing `skills` and `technician_skills` tables. Run `database/seed/002_skills.sql` after `001_reference_data.sql` to create one skill per category. Administrators then set skills per technician through the API.
 
 ## 3. Business rules

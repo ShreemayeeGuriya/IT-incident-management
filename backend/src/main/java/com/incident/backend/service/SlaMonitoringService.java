@@ -11,9 +11,11 @@ import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.nio.charset.StandardCharsets;
 import java.time.Instant;
-import java.util.Optional;
 import java.util.Objects;
+import java.util.Optional;
+import java.util.UUID;
 
 @Service
 public class SlaMonitoringService {
@@ -87,8 +89,12 @@ public class SlaMonitoringService {
         SlaObjectiveStatus oldStatus = previous == null
                 ? SlaObjectiveStatus.NOT_STARTED : previous;
         if (oldStatus == current) return;
+        UUID eventId = current == SlaObjectiveStatus.APPROACHING_BREACH
+                ? UUID.nameUUIDFromBytes((incidentId + "|" + objective + "|" + deadline
+                        + "|APPROACHING_BREACH").getBytes(StandardCharsets.UTF_8))
+                : UUID.randomUUID();
         eventPublisher.publishEvent(new SlaObjectiveTransitionEvent(
-                java.util.UUID.randomUUID(), incidentId, null, now, objective,
+                eventId, incidentId, null, now, objective,
                 oldStatus, current, deadline));
     }
 

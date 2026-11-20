@@ -19,6 +19,7 @@ public interface NotificationRepository extends JpaRepository<Notification, Inte
     Page<Notification> findAllByUserIdOrderByCreatedAtDesc(Integer userId, Pageable pageable);
     Page<Notification> findAllByUserIdOrderByCreatedAtDescIdDesc(Integer userId, Pageable pageable);
     long countByUserIdAndIsReadFalse(Integer userId);
+    long countByIncidentIdAndNotificationTypeAndUserId(Integer incidentId, String notificationType, Integer userId);
     Optional<Notification> findByIdAndUserId(Integer id, Integer userId);
     Optional<Notification> findByEventKey(String eventKey);
     boolean existsByEventKey(String eventKey);

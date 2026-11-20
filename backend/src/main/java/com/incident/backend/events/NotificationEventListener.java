@@ -50,11 +50,30 @@ public class NotificationEventListener {
             addStatusRecipients(status, recipients);
         } else if (event instanceof CommentCreatedEvent comment) {
             addCommentRecipients(comment, recipients);
+        } else if (event instanceof CommentCreatedEvent comment) {
+            addCommentRecipients(comment, recipients);
+        } else if (event instanceof AdditionalInformationRequestedEvent request) {
+            add(recipients, request.reporterUserId(),
+                    "The technician requested additional information for incident #"
+                            + request.incidentId() + ".");
+        } else if (event instanceof AdditionalInformationRespondedEvent response) {
+            add(recipients, response.requestingTechnicianUserId(),
+                    "The reporter responded to your information request for incident #"
+                            + response.incidentId() + ".");
         } else if (event instanceof IncidentEscalatedEvent escalated) {
             addEscalationRecipients(escalated, recipients);
         } else if (event instanceof SlaObjectiveTransitionEvent sla
-                && sla.newStatus() == SlaObjectiveStatus.BREACHED) {
-            addSlaBreachRecipients(sla, recipients);
+                && (sla.newStatus() == SlaObjectiveStatus.APPROACHING_BREACH
+                    || sla.newStatus() == SlaObjectiveStatus.BREACHED)) {
+            addSlaObjectiveRecipients(sla, recipients);
+        } // IncidentUpdatedEvent intentionally creates no notification.
+                    + response.incidentId() + ".");
+        } else if (event instanceof IncidentEscalatedEvent escalated) {
+            addEscalationRecipients(escalated, recipients);
+        } else if (event instanceof SlaObjectiveTransitionEvent sla
+                && (sla.newStatus() == SlaObjectiveStatus.APPROACHING_BREACH
+                    || sla.newStatus() == SlaObjectiveStatus.BREACHED)) {
+            addSlaObjectiveRecipients(sla, recipients);
         } // IncidentUpdatedEvent intentionally creates no notification.
 
         if (!recipients.isEmpty()) notificationService.createNotifications(event, recipients);
@@ -106,11 +125,14 @@ public class NotificationEventListener {
                 "A new comment was added to incident #" + event.incidentId() + "."));
     }
 
-    private void addSlaBreachRecipients(SlaObjectiveTransitionEvent event,
-                                         Map<Integer, String> recipients) {
+    private void addSlaObjectiveRecipients(SlaObjectiveTransitionEvent event,
+                                            Map<Integer, String> recipients) {
         Incident incident = incident(event.incidentId());
-        String message = "Incident #" + event.incidentId() + " has breached its "
-                + event.objective().name().toLowerCase() + " SLA.";
+        String objective = event.objective().name().toLowerCase();
+        String message = event.newStatus() == SlaObjectiveStatus.APPROACHING_BREACH
+                ? "Incident #" + event.incidentId() + " is approaching its " + objective
+                    + " SLA deadline at " + event.deadline() + "."
+                : "Incident #" + event.incidentId() + " has breached its " + objective + " SLA.";
         add(recipients, incident.getReporter(), message);
         if (incident.getAssignedTechnician() != null) {
             add(recipients, incident.getAssignedTechnician().getUser(), message);
