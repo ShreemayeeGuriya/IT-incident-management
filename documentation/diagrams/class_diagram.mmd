@@ -1,0 +1,41 @@
+classDiagram
+  class User {+Long id; +String email; +Role role}
+  class Technician {+AvailabilityStatus status; +int maxWorkload}
+  class Incident {+Long id; +String description; +Priority priority; +IncidentStatus status}
+  class Category {+Long id; +String name}
+  class AffectedService {+Long id; +String name}
+  class SlaPolicy {+Priority priority; +Duration response; +Duration resolution}
+  class Comment {+String body; +Instant createdAt}
+  class AuditLog {+String action; +Instant createdAt}
+  class IncidentState {<<interface>> +transitionTo()}
+  class ReportedState
+  class AssignedState
+  class ResolvedState
+  class PriorityStrategy {<<interface>> +calculate(input)}
+  class WeightedScorePriorityStrategy
+  class ImpactUrgencyMatrixPriorityStrategy
+  class AssignmentStrategy {<<interface>> +select(candidates)}
+  class SkillBasedAssignmentStrategy
+  class LoadBasedAssignmentStrategy
+  class RoundRobinAssignmentStrategy
+  class IncidentService {+create(); +update(); +changeState()}
+  class AssignmentService {+recommend(); +assign()}
+  User "1" --> "0..1" Technician
+  User "1" --> "0..*" Incident : reports
+  Technician "0..1" --> "0..*" Incident : assigned
+  Incident --> Category
+  Incident --> AffectedService
+  Incident --> SlaPolicy
+  Incident "1" --> "0..*" Comment
+  Incident "1" --> "0..*" AuditLog
+  IncidentService ..> PriorityStrategy
+  IncidentService ..> IncidentState
+  AssignmentService ..> AssignmentStrategy
+  IncidentState <|.. ReportedState
+  IncidentState <|.. AssignedState
+  IncidentState <|.. ResolvedState
+  PriorityStrategy <|.. WeightedScorePriorityStrategy
+  PriorityStrategy <|.. ImpactUrgencyMatrixPriorityStrategy
+  AssignmentStrategy <|.. SkillBasedAssignmentStrategy
+  AssignmentStrategy <|.. LoadBasedAssignmentStrategy
+  AssignmentStrategy <|.. RoundRobinAssignmentStrategy

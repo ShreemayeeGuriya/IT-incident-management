@@ -46,8 +46,8 @@ export const incidentsApi = {
 };
 
 export const lookupApi = {
-  categories: () => api<T.Lookup[]>("/categories"),
-  services: () => api<T.Lookup[]>("/services"),
+  categories: () => api<T.Lookup[]>("/categories", { cache: "no-store" }),
+  services: () => api<T.Lookup[]>("/services", { cache: "no-store" }),
   slaPolicies: () => api<T.SlaPolicy[]>("/sla-policies"),
   skills: () => api<string[]>("/skills"),
 };

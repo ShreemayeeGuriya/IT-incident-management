@@ -7,6 +7,7 @@ import "./index.css";
 import "./styles/theme.css";
 import "./styles/shell.css";
 import "./styles/auth.css";
+import "./styles/product.css";
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>

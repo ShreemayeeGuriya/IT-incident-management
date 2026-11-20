@@ -14,3 +14,14 @@ export const fmtDate = (iso: string | null | undefined): string =>
   iso
     ? new Date(iso).toLocaleString([], { dateStyle: "medium", timeStyle: "short" })
     : "—";
+
+export const fmtRemaining = (iso: string | null | undefined): string => {
+  if (!iso) return "Deadline unavailable";
+  const delta = new Date(iso).getTime() - Date.now();
+  const totalMinutes = Math.ceil(Math.abs(delta) / 60_000);
+  const days = Math.floor(totalMinutes / 1440);
+  const hours = Math.floor((totalMinutes % 1440) / 60);
+  const minutes = totalMinutes % 60;
+  const span = days ? `${days}d ${hours}h` : hours ? `${hours}h ${minutes}m` : `${minutes}m`;
+  return delta < 0 ? `Overdue by ${span}` : `${span} remaining`;
+};

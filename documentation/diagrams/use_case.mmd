@@ -1,0 +1,25 @@
+flowchart LR
+  EMP[Employee] --- C[Report incident]
+  EMP --- V[Track own incidents]
+  EMP --- COM[Comment / view history]
+  EMP --- N[Read notifications]
+  TECH[Technician] --- Q[View shared queue]
+  TECH --- AS[Assign / investigate]
+  TECH --- RES[Resolve / verify / close]
+  TECH --- W[View workload]
+  ADMIN[Administrator] --- U[Manage users and roles]
+  ADMIN --- SK[Manage technician skills]
+  ADMIN --- ST[Select decision strategies]
+  ADMIN --- REF[View reference data]
+  SYS((Radar ITSM)) --- C
+  SYS --- V
+  SYS --- COM
+  SYS --- N
+  SYS --- Q
+  SYS --- AS
+  SYS --- RES
+  SYS --- W
+  SYS --- U
+  SYS --- SK
+  SYS --- ST
+  SYS --- REF

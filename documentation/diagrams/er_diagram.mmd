@@ -1,0 +1,28 @@
+erDiagram
+  users ||--o| technicians : profile
+  users ||--o{ incidents : reports
+  technicians o|--o{ incidents : assigned
+  categories ||--o{ incidents : classifies
+  services ||--o{ incidents : affects
+  sla_policies ||--o{ incidents : governs
+  technicians ||--o{ technician_skills : has
+  skills ||--o{ technician_skills : names
+  incidents ||--o{ comments : contains
+  users ||--o{ comments : writes
+  incidents ||--o{ audit_logs : records
+  users ||--o{ audit_logs : acts
+  incidents ||--o{ incident_escalations : escalates
+  incidents ||--o{ notifications : triggers
+  users ||--o{ notifications : receives
+  users {bigint id PK; varchar email UK; varchar password_hash; varchar role}
+  technicians {bigint id PK; bigint user_id FK; varchar availability_status; int max_workload}
+  skills {bigint id PK; varchar name UK}
+  technician_skills {bigint technician_id PK,FK; bigint skill_id PK,FK}
+  categories {bigint id PK; varchar name UK}
+  services {bigint id PK; varchar name UK}
+  sla_policies {bigint id PK; varchar priority UK; int response_minutes; int resolution_minutes}
+  incidents {bigint id PK; bigint reporter_id FK; bigint technician_id FK; bigint category_id FK; bigint service_id FK; varchar status; varchar priority}
+  comments {bigint id PK; bigint incident_id FK; bigint author_id FK}
+  audit_logs {bigint id PK; bigint incident_id FK; bigint actor_id FK}
+  incident_escalations {bigint id PK; bigint incident_id FK; varchar objective}
+  notifications {bigint id PK; bigint incident_id FK; bigint recipient_id FK; varchar event_key}

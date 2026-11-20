@@ -11,4 +11,10 @@ public record DuplicateIncidentCheckRequest(
         @Size(max = 10000, message = "Description must be at most 10000 characters")
         String description,
         @NotNull(message = "Category is required") @Positive(message = "Category ID must be positive") Integer categoryId,
-        @NotNull(message = "Service is required") @Positive(message = "Service ID must be positive") Integer serviceId) { }
+        @NotNull(message = "Service is required") @Positive(message = "Service ID must be positive") Integer serviceId,
+        @Positive(message = "Excluded incident ID must be positive") Integer excludedIncidentId) {
+
+    public DuplicateIncidentCheckRequest(String description, Integer categoryId, Integer serviceId) {
+        this(description, categoryId, serviceId, null);
+    }
+}

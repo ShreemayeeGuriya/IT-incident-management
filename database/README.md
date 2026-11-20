@@ -31,9 +31,12 @@ Commands below use `radar_itsm` as the example database name and are run from th
 
    ```sh
    psql -U postgres -d radar_itsm -v ON_ERROR_STOP=1 -f database/seed/001_reference_data.sql
+   psql -U postgres -d radar_itsm -v ON_ERROR_STOP=1 -f database/seed/002_skills.sql
    ```
 
-   The seed uses conflict handling that preserves existing rows and SLA policy values. Review the rows afterward if you have customized reference data.
+   These seeds use conflict handling that preserves existing reference rows and SLA policy values. Review the rows afterward if you have customized reference data.
+
+   For an already initialized database, rerun both idempotent seeds to add the full OOP project category, IT service, and technician skill examples. They insert only names that are missing. On each PostgreSQL backend startup, the application reapplies both seeds in order so missing categories, services, SLAs, and category-based technician skills are available automatically.
 
 4. Configure `.env` at the repository root, following the safe placeholders in `.env.example`, then start the backend as documented in the root README.
 
@@ -50,6 +53,7 @@ psql -U postgres -d radar_itsm -v ON_ERROR_STOP=1 -f database/migrations/003_add
 psql -U postgres -d radar_itsm -v ON_ERROR_STOP=1 -f database/migrations/004_add_sla_objective_statuses.sql
 psql -U postgres -d radar_itsm -v ON_ERROR_STOP=1 -f database/migrations/005_create_incident_escalations.sql
 psql -U postgres -d radar_itsm -v ON_ERROR_STOP=1 -f database/seed/001_reference_data.sql
+psql -U postgres -d radar_itsm -v ON_ERROR_STOP=1 -f database/seed/002_skills.sql
 ```
 
 Migrations 002, 003, and 004 have explicit transaction boundaries. Migration 001 is one atomic `ALTER TABLE` statement. `ON_ERROR_STOP=1` makes `psql` stop if a statement fails; an open migration transaction is rolled back when the connection closes. Migrations 002–004 are not rerunnable; check the current schema before retrying any migration that may have partially or fully run.
@@ -65,6 +69,14 @@ psql -U postgres -d radar_itsm -v ON_ERROR_STOP=1 -f database/verify_schema.sql
 ```
 
 It opens a read-only transaction and raises an error if expected tables, columns, indexes, foreign keys, primary/unique constraints, or check constraints are missing. It does not alter the database. Confirm the seed contents separately:
+
+Run the reference-data check after applying the seeds:
+
+```sh
+psql -U postgres -d radar_itsm -v ON_ERROR_STOP=1 -f database/verify_reference_data.sql
+```
+
+This read-only check verifies all category and service examples required by the project brief.
 
 ```sql
 SELECT category_name FROM categories ORDER BY category_name;

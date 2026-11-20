@@ -20,7 +20,7 @@ export default function TopBar() {
 
   return (
     <header className="topbar">
-      <strong>Radar · Incidents</strong>
+      <strong>Radar</strong>
       <input
         className="search"
         placeholder="Search incidents"

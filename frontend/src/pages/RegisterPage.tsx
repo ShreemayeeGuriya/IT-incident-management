@@ -34,7 +34,7 @@ export default function RegisterPage() {
         else if (err.body?.fieldErrors) setFieldErrors(err.body.fieldErrors);
         else setError(err.message);
       } else {
-        setError("Cannot reach the server. Is the backend running on port 8080?");
+        setError("Cannot reach the server. Please try again.");
       }
     } finally {
       setBusy(false);
@@ -45,7 +45,6 @@ export default function RegisterPage() {
     <div className="auth-wrap">
       <form className="auth-card" onSubmit={onSubmit}>
         <h1>Create account</h1>
-        <div className="sub">New accounts are created as Employees</div>
         {error && <div className="auth-banner">{error}</div>}
 
         <label>Full name</label>

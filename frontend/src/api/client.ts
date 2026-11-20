@@ -1,4 +1,4 @@
-const BASE = import.meta.env.VITE_API_URL as string;
+const BASE = (import.meta.env.VITE_API_URL || "http://localhost:8080/api").replace(/\/$/, "");
 
 export class ApiError extends Error {
   status: number;
@@ -21,7 +21,7 @@ export async function api<T>(path: string, opts: RequestInit = {}): Promise<T> {
     },
   });
 
-  const body = await res.json().catch(() => null);
+  const body = res.status === 204 ? null : await res.json().catch(() => null);
 
   // Expired or invalid token: clear session and go to login
   // (but not for a wrong password on the login call itself)

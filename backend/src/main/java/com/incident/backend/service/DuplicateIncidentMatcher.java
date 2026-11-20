@@ -6,11 +6,12 @@ import org.springframework.stereotype.Component;
 /** Scores candidate incidents using description similarity and matching classification metadata. */
 @Component
 public class DuplicateIncidentMatcher {
-    private static final double DESCRIPTION_WEIGHT = 0.70;
-    private static final double CATEGORY_WEIGHT = 0.15;
-    private static final double SERVICE_WEIGHT = 0.15;
+    private static final double DESCRIPTION_WEIGHT = 0.85;
+    private static final double CATEGORY_WEIGHT = 0.075;
+    private static final double SERVICE_WEIGHT = 0.075;
+    // Metadata can refine ranking but text still needs meaningful symptom overlap.
     private static final double MIN_DESCRIPTION_SIMILARITY = 0.35;
-    private static final double MIN_TOTAL_SCORE = 0.55;
+    private static final double MIN_TOTAL_SCORE = 0.48;
 
     private final DescriptionSimilarity descriptionSimilarity;
 

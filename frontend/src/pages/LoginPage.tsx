@@ -23,7 +23,7 @@ export default function LoginPage() {
     } catch (err) {
       if (err instanceof ApiError && err.status === 401) setError("Invalid email or password.");
       else if (err instanceof ApiError) setError(err.message);
-      else setError("Cannot reach the server. Is the backend running on port 8080?");
+      else setError("Cannot reach the server. Please try again.");
     } finally {
       setBusy(false);
     }
@@ -32,8 +32,7 @@ export default function LoginPage() {
   return (
     <div className="auth-wrap">
       <form className="auth-card" onSubmit={onSubmit}>
-        <h1>Radar · Incidents</h1>
-        <div className="sub">Sign in to continue</div>
+        <h1 className="auth-brand">Radar</h1>
         {error && <div className="auth-banner">{error}</div>}
 
         <label>Email</label>
