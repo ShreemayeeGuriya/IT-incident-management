@@ -9,7 +9,6 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Lock;
-import org.springframework.data.domain.Pageable;
 
 import java.time.Instant;
 import java.util.List;
@@ -28,14 +27,12 @@ public interface IncidentRepository
             select i from Incident i
             join fetch i.category
             join fetch i.service
-            where (i.category.id = :categoryId or i.service.id = :serviceId)
+            where (:excludedIncidentId is null or i.id <> :excludedIncidentId)
               and (:reporterId is null or i.reporter.id = :reporterId)
             order by i.createdAt desc, i.id desc
             """)
-    List<Incident> findDuplicateCandidates(@Param("categoryId") Integer categoryId,
-                                          @Param("serviceId") Integer serviceId,
-                                          @Param("reporterId") Integer reporterId,
-                                          Pageable pageable);
+    List<Incident> findDuplicateCandidates(@Param("reporterId") Integer reporterId,
+                                          @Param("excludedIncidentId") Integer excludedIncidentId);
 
     @Query("""
             select i.id from Incident i

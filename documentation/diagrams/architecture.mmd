@@ -1,0 +1,15 @@
+flowchart LR
+  U[Employee / Technician / Admin] --> UI[React + TypeScript SPA]
+  UI -->|HTTPS REST + JWT| API[Spring Boot Controllers]
+  API --> SEC[Spring Security / JWT]
+  API --> SVC[Domain Services]
+  SVC --> STR[Priority & Assignment Strategies]
+  SVC --> STATE[Incident Lifecycle States]
+  SVC --> REPO[Repositories: JPA + JDBC]
+  SVC --> EVT[Application Events]
+  EVT --> AUD[Audit / Notification Listeners]
+  EVT --> MAIL[Simulated Email After Commit]
+  SCH[SLA & Retry Schedulers] --> SVC
+  REPO --> DB[(PostgreSQL)]
+  AUD --> DB
+  MAIL --> DB

@@ -8,7 +8,6 @@ import com.incident.backend.model.User;
 import com.incident.backend.repository.AffectedServiceRepository;
 import com.incident.backend.repository.CategoryRepository;
 import com.incident.backend.repository.IncidentRepository;
-import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -18,8 +17,6 @@ import java.util.List;
 /** Produces read-only duplicate suggestions before an incident is created. */
 @Service
 public class DuplicateIncidentService {
-    private static final int MAX_CANDIDATES = 200;
-
     private final IncidentRepository incidentRepository;
     private final CategoryRepository categoryRepository;
     private final AffectedServiceRepository serviceRepository;
@@ -45,8 +42,8 @@ public class DuplicateIncidentService {
         }
 
         Integer reporterId = IncidentAccess.isStaff(current) ? null : current.getId();
-        List<Incident> candidates = incidentRepository.findDuplicateCandidates(request.categoryId(),
-                request.serviceId(), reporterId, PageRequest.of(0, MAX_CANDIDATES));
+        List<Incident> candidates = incidentRepository.findDuplicateCandidates(reporterId,
+                request.excludedIncidentId());
 
         return candidates.stream()
                 .map(candidate -> new ScoredCandidate(candidate, matcher.score(request.description(),
