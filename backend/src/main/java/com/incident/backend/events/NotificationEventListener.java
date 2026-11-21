@@ -43,38 +43,32 @@ public class NotificationEventListener {
     public void onIncidentEvent(IncidentAuditEvent event) {
         Map<Integer, String> recipients = new LinkedHashMap<>();
         if (event instanceof IncidentCreatedEvent created) {
-            addNewIncidentRecipients(created, recipients);
-        } else if (event instanceof TechnicianAssignmentChangedEvent assignment) {
-            addAssignmentRecipients(assignment, recipients);
-        } else if (event instanceof IncidentStatusChangedEvent status) {
-            addStatusRecipients(status, recipients);
-        } else if (event instanceof CommentCreatedEvent comment) {
-            addCommentRecipients(comment, recipients);
-        } else if (event instanceof CommentCreatedEvent comment) {
-            addCommentRecipients(comment, recipients);
-        } else if (event instanceof AdditionalInformationRequestedEvent request) {
-            add(recipients, request.reporterUserId(),
-                    "The technician requested additional information for incident #"
-                            + request.incidentId() + ".");
-        } else if (event instanceof AdditionalInformationRespondedEvent response) {
-            add(recipients, response.requestingTechnicianUserId(),
-                    "The reporter responded to your information request for incident #"
-                            + response.incidentId() + ".");
-        } else if (event instanceof IncidentEscalatedEvent escalated) {
-            addEscalationRecipients(escalated, recipients);
-        } else if (event instanceof SlaObjectiveTransitionEvent sla
-                && (sla.newStatus() == SlaObjectiveStatus.APPROACHING_BREACH
-                    || sla.newStatus() == SlaObjectiveStatus.BREACHED)) {
-            addSlaObjectiveRecipients(sla, recipients);
-        } // IncidentUpdatedEvent intentionally creates no notification.
+           addNewIncidentRecipients(created, recipients);
+} else if (event instanceof TechnicianAssignmentChangedEvent assignment) {
+    addAssignmentRecipients(assignment, recipients);
+} else if (event instanceof IncidentStatusChangedEvent status) {
+    addStatusRecipients(status, recipients);
+} else if (event instanceof CommentCreatedEvent comment) {
+    addCommentRecipients(comment, recipients);
+} else if (event instanceof AdditionalInformationRequestedEvent request) {
+    add(recipients, request.reporterUserId(),
+            "The technician requested additional information for incident #"
+                    + request.incidentId() + ".");
+} else if (event instanceof AdditionalInformationRespondedEvent response) {
+    add(recipients, response.requestingTechnicianUserId(),
+            "The reporter responded to your information request for incident #"
                     + response.incidentId() + ".");
-        } else if (event instanceof IncidentEscalatedEvent escalated) {
-            addEscalationRecipients(escalated, recipients);
-        } else if (event instanceof SlaObjectiveTransitionEvent sla
-                && (sla.newStatus() == SlaObjectiveStatus.APPROACHING_BREACH
-                    || sla.newStatus() == SlaObjectiveStatus.BREACHED)) {
-            addSlaObjectiveRecipients(sla, recipients);
-        } // IncidentUpdatedEvent intentionally creates no notification.
+} else if (event instanceof IncidentEscalatedEvent escalated) {
+    addEscalationRecipients(escalated, recipients);
+} else if (event instanceof SlaObjectiveTransitionEvent sla
+        && (sla.newStatus() == SlaObjectiveStatus.APPROACHING_BREACH
+            || sla.newStatus() == SlaObjectiveStatus.BREACHED)) {
+    addSlaObjectiveRecipients(sla, recipients);
+} // IncidentUpdatedEvent intentionally creates no notification.
+
+if (!recipients.isEmpty()) {
+    notificationService.createNotifications(event, recipients);
+}
 
         if (!recipients.isEmpty()) notificationService.createNotifications(event, recipients);
     }

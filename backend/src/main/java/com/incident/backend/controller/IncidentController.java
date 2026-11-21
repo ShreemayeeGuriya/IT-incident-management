@@ -177,4 +177,4 @@ public IncidentInformationRequestResponse respondToInformationRequest(
     return informationRequestService.respond(id, requestId, request.message(), p.getUser());
 }
     }
-}
+
