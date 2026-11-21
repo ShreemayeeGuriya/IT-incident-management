@@ -31,7 +31,7 @@ class DuplicateIncidentServiceTest {
         Incident matching = incident(10, 1, 2,
                 " The office Wi-Fi is disconnecting repeatedly. Employees are unable to access internal applications or the internet reliably. The connection drops every few minutes.");
         Incident unrelated = incident(11, 1, 2, "The office printer needs a new toner cartridge");
-        when(incidents.findDuplicateCandidates(null, null)).thenReturn(List.of(matching, unrelated));
+        when(incidents.findDuplicateCandidates(null)).thenReturn(List.of(matching, unrelated));
 
         User admin = mock(User.class);
         when(admin.getRole()).thenReturn(Role.ADMIN);
@@ -57,7 +57,7 @@ class DuplicateIncidentServiceTest {
                 "The company database is responding extremely slowly. Employees are experiencing long delays when loading records, and some database queries are timing out.");
         Incident unrelated = incident(21, 1, 2,
                 "A database user needs read permission to a new finance table for an audit.");
-        when(incidents.findDuplicateCandidates(null, null)).thenReturn(List.of(unrelated, matching));
+        when(incidents.findDuplicateCandidates(null)).thenReturn(List.of(unrelated, matching));
 
         User admin = mock(User.class);
         when(admin.getRole()).thenReturn(Role.ADMIN);
@@ -82,7 +82,7 @@ class DuplicateIncidentServiceTest {
 
         Incident weaker = incident(10, 1, 2, "Email service unavailable for some users after maintenance");
         Incident stronger = incident(11, 1, 2, "Email server unavailable for all users after restart");
-        when(incidents.findDuplicateCandidates(null, null)).thenReturn(List.of(weaker, stronger));
+        when(incidents.findDuplicateCandidates(null)).thenReturn(List.of(weaker, stronger));
 
         User admin = mock(User.class);
         when(admin.getRole()).thenReturn(Role.ADMIN);

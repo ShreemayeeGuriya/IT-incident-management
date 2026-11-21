@@ -24,15 +24,14 @@ public interface IncidentRepository
     Optional<Incident> findByIdForUpdate(@Param("incidentId") Integer incidentId);
 
     @Query("""
-            select i from Incident i
-            join fetch i.category
-            join fetch i.service
-            where (:excludedIncidentId is null or i.id <> :excludedIncidentId)
-              and (:reporterId is null or i.reporter.id = :reporterId)
-            order by i.createdAt desc, i.id desc
-            """)
-    List<Incident> findDuplicateCandidates(@Param("reporterId") Integer reporterId,
-                                          @Param("excludedIncidentId") Integer excludedIncidentId);
+        select i from Incident i
+        join fetch i.category
+        join fetch i.service
+        where (:excludedIncidentId is null or i.id <> :excludedIncidentId)
+        order by i.createdAt desc, i.id desc
+        """)
+List<Incident> findDuplicateCandidates(
+        @Param("excludedIncidentId") Integer excludedIncidentId);
 
     @Query("""
             select i.id from Incident i

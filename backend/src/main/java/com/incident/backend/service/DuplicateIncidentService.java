@@ -41,9 +41,8 @@ public class DuplicateIncidentService {
             throw new ResourceNotFoundException("Service not found: " + request.serviceId());
         }
 
-        Integer reporterId = IncidentAccess.isStaff(current) ? null : current.getId();
-        List<Incident> candidates = incidentRepository.findDuplicateCandidates(reporterId,
-                request.excludedIncidentId());
+        List<Incident> candidates = incidentRepository.findDuplicateCandidates(
+        request.excludedIncidentId());
 
         return candidates.stream()
                 .map(candidate -> new ScoredCandidate(candidate, matcher.score(request.description(),
